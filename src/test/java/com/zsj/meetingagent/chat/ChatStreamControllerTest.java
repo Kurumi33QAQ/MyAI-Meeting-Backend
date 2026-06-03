@@ -4,15 +4,26 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.zsj.meetingagent.chat.service.ChatSessionService;
+import com.zsj.meetingagent.chat.vo.ChatMessageResponse;
+import com.zsj.meetingagent.chat.vo.ChatSessionResponse;
+
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
@@ -32,6 +43,9 @@ class ChatStreamControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @MockBean
+    private ChatSessionService chatSessionService;
+
     @Test
     void streamEndpointRequiresLogin() throws Exception {
         mockMvc.perform(post("/api/ai/chat/stream")
@@ -47,6 +61,7 @@ class ChatStreamControllerTest {
     @Test
     void streamEndpointReturnsSseChunksForLoggedInUser() throws Exception {
         String token = registerAndLogin();
+        mockChatSession("stage3-stream-session");
 
         MvcResult result = mockMvc.perform(post("/api/ai/chat/stream")
                         .header("Authorization", "Bearer " + token)
@@ -71,6 +86,7 @@ class ChatStreamControllerTest {
     @Test
     void legacyFrontendAiEndpointsKeepChatPageUsable() throws Exception {
         String token = registerAndLogin();
+        mockChatSession("test-session");
 
         mockMvc.perform(get("/api/xunzhi/v1/ai-properties")
                         .header("Authorization", "Bearer " + token))
@@ -143,5 +159,34 @@ class ChatStreamControllerTest {
                 .getResponse()
                 .getContentAsString()
                 .replaceAll(".*\\\"token\\\":\\\"([^\\\"]+)\\\".*", "$1");
+    }
+
+    private void mockChatSession(String sessionId) {
+        ChatSessionResponse session = new ChatSessionResponse(
+                sessionId,
+                "测试会话",
+                "gpt-4o-mini",
+                0,
+                Instant.now(),
+                Instant.now()
+        );
+        when(chatSessionService.ensureSession(anyString(), nullable(String.class), anyString(), nullable(String.class)))
+                .thenReturn(session);
+        when(chatSessionService.createSession(anyString(), nullable(String.class), nullable(String.class)))
+                .thenReturn(session);
+        when(chatSessionService.listSessions(anyString(), anyLong(), anyLong()))
+                .thenReturn(List.of(session));
+        when(chatSessionService.countSessions(anyString()))
+                .thenReturn(1L);
+        when(chatSessionService.listMessages(anyString(), anyString()))
+                .thenReturn(List.of(new ChatMessageResponse(
+                        "message-1",
+                        sessionId,
+                        "user",
+                        "你好",
+                        "gpt-4o-mini",
+                        1,
+                        Instant.now()
+                )));
     }
 }

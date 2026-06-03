@@ -4,6 +4,20 @@ server:
 spring:
   application:
     name: meeting-agent-backend
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/my_ai_meeting?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      initialization-fail-timeout: ${MYSQL_INIT_FAIL_TIMEOUT:1}
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/my_ai_meeting}
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:never}
+      schema-locations: classpath:db/schema-mysql.sql
   ai:
     openai:
       api-key: ${OPENAI_API_KEY:${SPRING_AI_OPENAI_API_KEY:dummy-key-for-local-mock}}
@@ -12,6 +26,10 @@ spring:
         options:
           model: ${MODEL_ID:${SPRING_AI_OPENAI_MODEL:gpt-4o-mini}}
           temperature: ${OPENAI_TEMPERATURE:${SPRING_AI_OPENAI_TEMPERATURE:0.7}}
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
 
 management:
   endpoints:

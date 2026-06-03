@@ -21,4 +21,9 @@ public record LegacyPageResponse<T>(
     public static <T> LegacyPageResponse<T> single(T record) {
         return new LegacyPageResponse<>(List.of(record), 1, 100, 1, 1);
     }
+
+    public static <T> LegacyPageResponse<T> of(List<T> records, long total, long current, long size) {
+        long pages = size <= 0 ? 0 : (long) Math.ceil((double) total / size);
+        return new LegacyPageResponse<>(records, total, size, current, pages);
+    }
 }

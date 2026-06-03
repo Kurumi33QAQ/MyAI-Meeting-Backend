@@ -15,6 +15,9 @@ public record ChatStreamRequest(
         String message,
 
         @Size(max = 80, message = "长度不能超过 80 个字符")
+        String sessionId,
+
+        @Size(max = 80, message = "长度不能超过 80 个字符")
         String model,
 
         @Size(max = 2000, message = "长度不能超过 2000 个字符")

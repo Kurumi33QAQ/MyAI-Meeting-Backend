@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zsj.meetingagent.ai.dto.AiChatRequest;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.chat.dto.ChatStreamRequest;
+import com.zsj.meetingagent.chat.service.ChatSessionService;
 import com.zsj.meetingagent.chat.service.ChatStreamService;
+import com.zsj.meetingagent.chat.vo.ChatSessionResponse;
 import com.zsj.meetingagent.chat.vo.StreamChunkResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -22,19 +24,34 @@ public class SseChatStreamService implements ChatStreamService {
     private static final long NO_TIMEOUT = 0L;
 
     private final AiChatService aiChatService;
+    private final ChatSessionService chatSessionService;
 
     private final ObjectMapper objectMapper;
 
-    public SseChatStreamService(AiChatService aiChatService, ObjectMapper objectMapper) {
+    public SseChatStreamService(
+            AiChatService aiChatService,
+            ChatSessionService chatSessionService,
+            ObjectMapper objectMapper
+    ) {
         this.aiChatService = aiChatService;
+        this.chatSessionService = chatSessionService;
         this.objectMapper = objectMapper;
     }
 
     @Override
-    public SseEmitter stream(ChatStreamRequest request) {
+    public SseEmitter stream(ChatStreamRequest request, String username) {
         SseEmitter emitter = new SseEmitter(NO_TIMEOUT);
+        ChatSessionResponse session = chatSessionService.ensureSession(
+                username,
+                request.sessionId(),
+                request.message(),
+                request.model()
+        );
+        chatSessionService.saveUserMessage(username, session.sessionId(), request.message(), request.model());
+        StringBuilder answerBuilder = new StringBuilder();
         AiChatRequest aiRequest = new AiChatRequest(
                 request.message(),
+                session.sessionId(),
                 request.model(),
                 request.systemPrompt(),
                 request.temperature()
@@ -46,9 +63,20 @@ public class SseChatStreamService implements ChatStreamService {
          */
         Disposable disposable = aiChatService.streamChat(aiRequest)
                 .subscribe(
-                        chunk -> sendChunk(emitter, chunk),
+                        chunk -> {
+                            answerBuilder.append(chunk);
+                            sendChunk(emitter, chunk);
+                        },
                         error -> completeWithError(emitter, error),
-                        () -> completeStream(emitter)
+                        () -> {
+                            chatSessionService.saveAssistantMessage(
+                                    username,
+                                    session.sessionId(),
+                                    answerBuilder.toString(),
+                                    request.model()
+                            );
+                            completeStream(emitter);
+                        }
                 );
 
         emitter.onTimeout(() -> {

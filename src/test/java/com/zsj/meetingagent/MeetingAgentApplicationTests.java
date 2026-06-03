@@ -100,4 +100,68 @@ class MeetingAgentApplicationTests {
                 .andExpect(jsonPath("$.data.username").value(username))
                 .andExpect(jsonPath("$.data.isAdmin").value(false));
     }
+
+    @Test
+    void duplicateRegisterReturnsChineseBusinessMessage() throws Exception {
+        String body = """
+                {
+                  "username": "duplicate_user",
+                  "password": "12345678"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("A0101"))
+                .andExpect(jsonPath("$.message").value("用户名已存在"));
+    }
+
+    @Test
+    void wrongPasswordReturnsChineseBusinessMessage() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "wrong_password_user",
+                                  "password": "12345678"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "wrong_password_user",
+                                  "password": "wrong-password"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("A0201"))
+                .andExpect(jsonPath("$.message").value("用户名或密码错误"));
+    }
+
+    @Test
+    void invalidRegisterRequestReturnsChineseValidationMessage() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "",
+                                  "password": "123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("A0001"))
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
 }

@@ -4,6 +4,7 @@ import com.zsj.meetingagent.chat.dto.ChatStreamRequest;
 import com.zsj.meetingagent.chat.service.ChatStreamService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,7 +26,7 @@ public class ChatStreamController {
     }
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@Valid @RequestBody ChatStreamRequest request) {
-        return chatStreamService.stream(request);
+    public SseEmitter stream(@Valid @RequestBody ChatStreamRequest request, Authentication authentication) {
+        return chatStreamService.stream(request, authentication.getName());
     }
 }

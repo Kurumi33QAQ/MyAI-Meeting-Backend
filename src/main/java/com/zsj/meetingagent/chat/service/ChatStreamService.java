@@ -9,5 +9,5 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  */
 public interface ChatStreamService {
 
-    SseEmitter stream(ChatStreamRequest request);
+    SseEmitter stream(ChatStreamRequest request, String username);
 }

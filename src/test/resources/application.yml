@@ -1,0 +1,34 @@
+spring:
+  ai:
+    openai:
+      api-key: dummy-key-for-test
+      base-url: https://api.openai.com
+      chat:
+        options:
+          model: gpt-4o-mini
+  datasource:
+    url: jdbc:h2:mem:meeting_agent_test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/meeting_agent_test
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  auth:
+    jwt-secret: please-change-this-development-secret-32
+    token-expire-minutes: 1440
+  ai:
+    provider: openai-compatible
+    default-model: gpt-4o-mini
+    default-temperature: 0.7
+    mock-enabled: true
+    default-system-prompt: 你是一个中文友好的 Java 后端学习助手，回答要清晰、准确，并优先解释设计原因。
