@@ -19,7 +19,8 @@ import java.util.List;
 
 /**
  * 聊天会话接口。
- * 阶段 4 开始提供自己的会话和历史接口，旧前端路径继续放在 frontendadapter 中适配。
+ * 提供本项目新风格的会话创建、会话列表和消息历史接口。
+ * 旧前端路径继续放在 frontendadapter 中适配，后续接口命名统一时再逐步迁移。
  */
 @RestController
 @RequestMapping("/api/ai/sessions")

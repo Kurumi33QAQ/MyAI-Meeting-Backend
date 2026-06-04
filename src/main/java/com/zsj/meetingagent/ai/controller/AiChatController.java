@@ -15,7 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 基础 AI 对话接口。
- * 阶段 2 只处理一次请求一次完整回答，SSE 流式输出会在阶段 3 单独实现。
+ * 当前提供一次请求一次完整回答的同步聊天能力，并把用户输入和 AI 回复写入 MongoDB 会话历史。
+ * SSE 流式聊天由 chat 模块的 ChatStreamController 提供，Agent 最终回答会复用 AiChatService。
  */
 @RestController
 @RequestMapping("/api/ai")
@@ -38,8 +39,10 @@ public class AiChatController {
                 request.message(),
                 request.model()
         );
+        // 先保存用户消息，再调用模型；这样即使模型调用失败，也能保留用户真实输入用于排查问题。
         chatSessionService.saveUserMessage(username, session.sessionId(), request.message(), request.model());
         AiChatResponse response = aiChatService.chat(request);
+        // AI 回复保存到同一个 session，前端刷新历史时才能看到完整的一问一答。
         chatSessionService.saveAssistantMessage(username, session.sessionId(), response.answer(), response.model());
         return ApiResponse.success(response);
     }

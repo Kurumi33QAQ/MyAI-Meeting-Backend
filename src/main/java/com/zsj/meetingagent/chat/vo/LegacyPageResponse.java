@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * 旧前端分页响应结构。
- * 阶段 3 用于临时兼容 AI 页面，阶段 4 接入真实会话存储后再替换 records 数据来源。
+ * 兼容旧前端分页字段；records 当前可以承载 MongoDB 中查询到的真实会话和历史消息。
  */
 public record LegacyPageResponse<T>(
         List<T> records,

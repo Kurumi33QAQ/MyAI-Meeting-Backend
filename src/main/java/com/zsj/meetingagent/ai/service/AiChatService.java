@@ -6,7 +6,8 @@ import reactor.core.publisher.Flux;
 
 /**
  * AI 对话服务接口。
- * 阶段 3 开始同时支持同步回答和流式回答，因此先抽出接口，为后续 RAG、Agent、多模型策略留扩展点。
+ * 当前同时支持同步回答和流式回答，Agent 最终回答也复用这个接口。
+ * 后续 RAG、多模型路由和评测对照实验可以在实现层扩展，不需要改 Controller。
  */
 public interface AiChatService {
 

@@ -43,6 +43,7 @@ public class DefaultAiChatService implements AiChatService {
         String systemPrompt = chooseSystemPrompt(request.systemPrompt());
         Instant startedAt = Instant.now();
 
+        // mock 模式用于本地开发和自动化测试，避免每次测试都依赖真实 API Key、网络和账户余额。
         String answer = aiModelProperties.isMockEnabled()
                 ? mockAnswer(request.message())
                 : callLargeModel(request.message(), systemPrompt, model, temperature);
@@ -58,6 +59,7 @@ public class DefaultAiChatService implements AiChatService {
         String systemPrompt = chooseSystemPrompt(request.systemPrompt());
 
         if (aiModelProperties.isMockEnabled()) {
+            // mock 流式输出也拆成小片段，方便前端验证 SSE 逐段拼接逻辑。
             return Flux.fromIterable(splitForMockStream(mockAnswer(request.message())))
                     .delayElements(Duration.ofMillis(35));
         }
@@ -86,8 +88,8 @@ public class DefaultAiChatService implements AiChatService {
     private String callLargeModel(String message, String systemPrompt, String model, double temperature) {
         try {
             /*
-             * 同步调用用于阶段 2 的普通对话接口。
-             * 阶段 3 新增的 streamChat 会走流式调用，两者共用模型选择和 Prompt 选择逻辑。
+             * 同步调用用于普通聊天接口和 Agent 最终回答。
+             * 流式接口会走 streamChat，两者共用模型选择和 Prompt 选择逻辑。
              */
             return chatClientBuilder
                     .defaultOptions(OpenAiChatOptions.builder()
@@ -127,7 +129,7 @@ public class DefaultAiChatService implements AiChatService {
     }
 
     private String mockAnswer(String message) {
-        return "【本地模拟回答】我已经收到你的问题：“%s”。阶段 3 当前用于验证 SSE 流式输出链路；配置真实 API Key 并关闭 mock 后，会改为流式调用真实大模型。"
+        return "【本地模拟回答】我已经收到你的问题：“%s”。当前 mock 模式用于验证后端接口、SSE 分片、会话存储和 Agent 编排链路；配置真实 API Key 并关闭 mock 后，会调用真实大模型。"
                 .formatted(message);
     }
 

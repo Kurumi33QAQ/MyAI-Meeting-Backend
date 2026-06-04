@@ -26,7 +26,8 @@ import java.util.UUID;
 
 /**
  * 默认 Agent 运行实现。
- * 阶段 5 先用规则选择工具，重点让 Thought-Action-Observation-Final Answer 的后端链路清晰可追踪。
+ * 当前实现规则版工具选择，并持久化 Thought-Action-Observation-Final Answer 执行轨迹。
+ * 后续可在保持接口不变的前提下升级为 LLM Tool Calling 或接入 RAG 检索工具。
  */
 @Service
 public class DefaultAgentRunService implements AgentRunService {
@@ -73,16 +74,20 @@ public class DefaultAgentRunService implements AgentRunService {
         agentRunRepository.save(run);
 
         try {
+            // Thought：先把“为什么要调用工具”记录下来，方便后续排查 Agent 决策是否合理。
             String thought = buildThought(request);
             saveStep(runId, username, AgentStepType.THOUGHT, 1, null, thought);
 
             AgentToolContext context = new AgentToolContext(username, request.input().trim(), blankToNull(request.sessionId()), model);
+            // Action：当前用规则选择工具；后续升级 Tool Calling 时，这里会变成模型选择工具的结果。
             AgentTool tool = selectTool(context);
             saveStep(runId, username, AgentStepType.ACTION, 2, tool.name(), "调用工具：" + tool.name() + "，原因：" + tool.description());
 
+            // Observation：工具真实执行后的结果单独保存，最终回答必须基于这个观察结果生成。
             AgentToolResult observation = tool.execute(context);
             saveStep(runId, username, AgentStepType.OBSERVATION, 3, observation.toolName(), observation.observation());
 
+            // Final Answer：把工具观察结果交给 AI 生成面向用户的自然语言回答。
             String finalAnswer = generateFinalAnswer(request.input().trim(), observation, model);
             saveStep(runId, username, AgentStepType.FINAL_ANSWER, 4, null, finalAnswer);
 
@@ -114,11 +119,12 @@ public class DefaultAgentRunService implements AgentRunService {
         if (request.input().contains("时间") || request.input().contains("今天") || request.input().contains("现在")) {
             return "用户的问题和当前时间有关，因此准备调用时间工具。";
         }
-        return "用户提出了通用问题，阶段 5 简化版 Agent 会先调用稳定工具获得观察结果，再生成最终回答。";
+        return "用户提出了通用问题，当前 Agent 会先调用稳定工具获得观察结果，再生成最终回答。";
     }
 
     private AgentTool selectTool(AgentToolContext context) {
         return tools.stream()
+                // 有 sessionId 或用户明确问历史时，优先让聊天历史工具获得机会。
                 .sorted(Comparator.comparing(tool -> tool.name().equals("chat_history") ? 0 : 1))
                 .filter(tool -> tool.supports(context))
                 .findFirst()

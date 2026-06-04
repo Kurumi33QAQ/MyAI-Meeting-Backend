@@ -6,7 +6,8 @@ import java.util.Optional;
 
 /**
  * 用户存储接口。
- * 先用内存实现保证学习路径清晰，后续接入 MySQL 时只替换 repository 层。
+ * 当前默认实现是 MySQL，测试或 memory-user-store profile 可以切换为内存实现。
+ * Service 层只依赖这个接口，不直接关心用户数据具体来自哪种存储。
  */
 public interface UserStore {
 

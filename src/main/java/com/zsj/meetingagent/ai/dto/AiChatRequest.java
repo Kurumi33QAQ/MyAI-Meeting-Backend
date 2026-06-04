@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * 同步 AI 对话请求参数。
- * message 是本阶段最核心的用户输入，其他字段先保留为后续模型切换和 Prompt 管理做准备。
+ * message 是用户输入；sessionId、model、systemPrompt 和 temperature 用于会话存储、模型切换和 Prompt 调整。
  */
 public record AiChatRequest(
         @NotBlank(message = "不能为空")

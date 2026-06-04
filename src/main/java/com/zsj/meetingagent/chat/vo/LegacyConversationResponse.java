@@ -2,7 +2,7 @@ package com.zsj.meetingagent.chat.vo;
 
 /**
  * 旧前端创建会话响应。
- * 当前只返回临时 sessionId，真正的会话持久化放到阶段 4。
+ * 现在返回 MongoDB 持久化会话的 sessionId，用于兼容旧前端 AI 页面。
  */
 public record LegacyConversationResponse(
         String sessionId,

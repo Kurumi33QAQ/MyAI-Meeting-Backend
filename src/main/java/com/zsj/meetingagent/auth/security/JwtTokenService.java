@@ -18,7 +18,7 @@ import java.util.Map;
 
 /**
  * JWT 生成与校验服务。
- * 这里使用 JDK 自带 HMAC-SHA256 实现，避免阶段 1 为了 JWT 额外引入第三方依赖。
+ * 这里使用 JDK 自带 HMAC-SHA256 实现，减少认证链路对第三方 JWT 库的依赖。
  */
 @Service
 @EnableConfigurationProperties(AuthProperties.class)
@@ -49,6 +49,7 @@ public class JwtTokenService {
         payload.put("iat", now);
         payload.put("exp", expiresAt);
 
+        // JWT 签名前的内容由 header 和 payload 组成，签名只负责防篡改，不负责加密。
         String unsignedToken = encodeJson(header) + "." + encodeJson(payload);
         return unsignedToken + "." + sign(unsignedToken);
     }
@@ -61,6 +62,7 @@ public class JwtTokenService {
 
         String unsignedToken = parts[0] + "." + parts[1];
         String expectedSignature = sign(unsignedToken);
+        // 先验签再读取业务字段，避免攻击者伪造 payload 中的用户名或过期时间。
         if (!constantTimeEquals(expectedSignature, parts[2])) {
             throw invalidToken();
         }
@@ -114,6 +116,7 @@ public class JwtTokenService {
         if (left == null || right == null || left.length() != right.length()) {
             return false;
         }
+        // 常量时间比较可以降低签名逐字符比较带来的时序攻击风险。
         int result = 0;
         for (int i = 0; i < left.length(); i++) {
             result |= left.charAt(i) ^ right.charAt(i);

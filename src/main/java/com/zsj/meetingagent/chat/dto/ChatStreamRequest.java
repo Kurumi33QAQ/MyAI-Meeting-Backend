@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * 新风格流式聊天请求。
- * 阶段 3 只关心单轮流式输出，会话持久化和历史恢复放到阶段 4。
+ * 当前支持携带 sessionId 写入 MongoDB 会话历史；不传 sessionId 时后端会自动创建会话。
  */
 public record ChatStreamRequest(
         @NotBlank(message = "不能为空")

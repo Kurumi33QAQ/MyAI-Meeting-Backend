@@ -17,7 +17,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 /**
  * 安全配置。
- * 阶段 1 使用 JWT 做无状态登录认证：登录成功后前端保存 token，后续请求通过 Authorization 请求头携带。
+ * 当前项目使用 JWT 做无状态登录认证：登录成功后前端保存 token，后续请求通过 Authorization 请求头携带。
  */
 @Configuration
 @EnableWebSecurity
@@ -29,6 +29,10 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(registry -> registry
+                        /*
+                         * SSE 使用异步请求分发，ASYNC 分发阶段不再重复做鉴权，
+                         * 否则流式响应过程中可能被 Spring Security 二次拦截。
+                         */
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(
                                 "/api/health",

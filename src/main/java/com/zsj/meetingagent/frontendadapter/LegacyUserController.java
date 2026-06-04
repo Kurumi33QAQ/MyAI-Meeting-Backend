@@ -65,7 +65,7 @@ public class LegacyUserController {
 
     @PostMapping("/logout")
     public ApiResponse<Void> logout() {
-        // 阶段 1 使用无状态 JWT，旧前端调用退出接口时返回成功，实际 token 删除由前端完成。
+        // 当前还没有 Redis token 黑名单，退出登录先由前端删除 token；服务端失效能力放到后续限流/缓存阶段扩展。
         return ApiResponse.success();
     }
 

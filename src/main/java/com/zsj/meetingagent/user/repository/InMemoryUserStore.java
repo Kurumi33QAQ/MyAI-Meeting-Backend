@@ -9,8 +9,8 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 阶段 1 的内存用户仓储。
- * 它让登录注册先跑通，不依赖本地 MySQL；阶段 4/后续数据库阶段会替换为真实持久化实现。
+ * 内存用户仓储。
+ * 仅在 memory-user-store profile 下启用，适合本地快速演示或特殊测试；默认运行使用 MySQL 持久化用户。
  */
 @Repository
 @Profile("memory-user-store")

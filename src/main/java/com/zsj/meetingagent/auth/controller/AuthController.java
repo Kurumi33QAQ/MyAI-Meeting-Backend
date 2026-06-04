@@ -45,7 +45,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ApiResponse<Void> logout() {
-        // JWT 是无状态凭证；阶段 1 先由前端删除 token，后续可接入 Redis 黑名单实现服务端失效。
+        // JWT 是无状态凭证；当前退出先由前端删除 token，后续可接入 Redis 黑名单实现服务端失效。
         return ApiResponse.success();
     }
 }

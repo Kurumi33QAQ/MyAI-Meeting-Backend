@@ -10,7 +10,7 @@ import java.util.Optional;
 
 /**
  * 用户账号 MyBatis Mapper。
- * 负责访问 MySQL users 表，把阶段 1 的内存用户存储替换为可持久化的数据访问。
+ * 负责访问 MySQL users 表，提供用户注册写入、按用户名查询和用户名唯一性校验。
  */
 @Mapper
 public interface UserAccountMapper {

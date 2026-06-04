@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 
 /**
  * 聊天历史工具。
- * 复用阶段 4 的会话存储能力，让 Agent 可以基于用户自己的历史消息做观察。
+ * 复用 chat 模块的会话存储能力，让 Agent 可以基于用户自己的历史消息做观察。
  */
 @Component
 public class ChatHistoryTool implements AgentTool {

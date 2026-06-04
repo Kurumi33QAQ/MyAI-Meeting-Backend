@@ -4,7 +4,7 @@ import java.time.Instant;
 
 /**
  * 用户账号领域对象。
- * 阶段 1 使用内存存储，字段设计保持接近后续 MySQL users 表，便于平滑迁移。
+ * 当前默认由 MySQL users 表持久化，也保留给测试或 memory-user-store profile 复用。
  */
 public record UserAccount(
         Long id,

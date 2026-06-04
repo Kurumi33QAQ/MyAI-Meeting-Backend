@@ -7,7 +7,7 @@ import java.time.format.DateTimeFormatter;
 
 /**
  * 当前时间工具。
- * 这是阶段 5 的稳定演示工具，用于验证 Agent Action 和 Observation 链路可以真实调用后端方法。
+ * 这是一个稳定的演示工具，用于验证 Agent Action 和 Observation 链路可以真实调用后端方法。
  */
 @Component
 public class CurrentTimeTool implements AgentTool {
