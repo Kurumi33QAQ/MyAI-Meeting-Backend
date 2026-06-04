@@ -22,10 +22,16 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+sa-token:
+  token-name: Authorization
+  timeout: 86400
+  active-timeout: -1
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: false
+
 app:
-  auth:
-    jwt-secret: please-change-this-development-secret-32
-    token-expire-minutes: 1440
   ai:
     provider: openai-compatible
     default-model: gpt-4o-mini

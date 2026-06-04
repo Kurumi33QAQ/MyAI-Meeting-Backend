@@ -16,6 +16,7 @@ public record ApiResponse<T>(
 
     public static final String SUCCESS_CODE = "0";
     public static final String VALIDATION_ERROR_CODE = "A0001";
+    public static final String AUTH_ERROR_CODE = "A0301";
     public static final String SERVICE_ERROR_CODE = "B0001";
 
     public static <T> ApiResponse<T> success(T data) {

@@ -34,7 +34,7 @@ class MeetingAgentApplicationTests {
     }
 
     @Test
-    void authFlowIssuesJwtAndAllowsCurrentUserAccess() throws Exception {
+    void authFlowIssuesSaTokenAndAllowsCurrentUserAccess() throws Exception {
         String username = "stage1_user";
         String registerBody = """
                 {
@@ -86,7 +86,7 @@ class MeetingAgentApplicationTests {
                                 """))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/xunzhi/v1/users/login")
+        String token = mockMvc.perform(post("/api/xunzhi/v1/users/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -98,7 +98,21 @@ class MeetingAgentApplicationTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.token", not(blankOrNullString())))
                 .andExpect(jsonPath("$.data.username").value(username))
-                .andExpect(jsonPath("$.data.isAdmin").value(false));
+                .andExpect(jsonPath("$.data.isAdmin").value(false))
+                .andReturn()
+                .getResponse()
+                .getContentAsString()
+                .replaceAll(".*\\\"token\\\":\\\"([^\\\"]+)\\\".*", "$1");
+
+        mockMvc.perform(get("/api/xunzhi/v1/users/check-login"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.isLogin").value(false));
+
+        mockMvc.perform(get("/api/xunzhi/v1/users/check-login")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.isLogin").value(true))
+                .andExpect(jsonPath("$.data.username").value(username));
     }
 
     @Test

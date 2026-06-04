@@ -2,11 +2,11 @@ package com.zsj.meetingagent.auth.controller;
 
 import com.zsj.meetingagent.auth.dto.LoginRequest;
 import com.zsj.meetingagent.auth.dto.RegisterRequest;
+import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.auth.service.AuthService;
 import com.zsj.meetingagent.auth.vo.AuthResponse;
 import com.zsj.meetingagent.common.result.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,13 +39,16 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ApiResponse<AuthResponse> currentUser(Authentication authentication) {
-        return ApiResponse.success(authService.currentUser(authentication.getName()));
+    public ApiResponse<AuthResponse> currentUser() {
+        return ApiResponse.success(authService.currentUser(
+                LoginUserContext.currentUsername(),
+                LoginUserContext.currentToken().orElse("")
+        ));
     }
 
     @PostMapping("/logout")
     public ApiResponse<Void> logout() {
-        // JWT 是无状态凭证；当前退出先由前端删除 token，后续可接入 Redis 黑名单实现服务端失效。
+        authService.logout(LoginUserContext.currentUsername());
         return ApiResponse.success();
     }
 }

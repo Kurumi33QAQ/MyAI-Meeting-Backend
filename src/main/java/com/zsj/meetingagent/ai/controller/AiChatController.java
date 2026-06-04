@@ -1,5 +1,6 @@
 package com.zsj.meetingagent.ai.controller;
 
+import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.ai.dto.AiChatRequest;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.ai.vo.AiChatResponse;
@@ -7,7 +8,6 @@ import com.zsj.meetingagent.chat.service.ChatSessionService;
 import com.zsj.meetingagent.chat.vo.ChatSessionResponse;
 import com.zsj.meetingagent.common.result.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,8 +31,8 @@ public class AiChatController {
     }
 
     @PostMapping("/chat")
-    public ApiResponse<AiChatResponse> chat(@Valid @RequestBody AiChatRequest request, Authentication authentication) {
-        String username = currentUsername(authentication);
+    public ApiResponse<AiChatResponse> chat(@Valid @RequestBody AiChatRequest request) {
+        String username = LoginUserContext.currentUsername();
         ChatSessionResponse session = chatSessionService.ensureSession(
                 username,
                 request.sessionId(),
@@ -45,9 +45,5 @@ public class AiChatController {
         // AI 回复保存到同一个 session，前端刷新历史时才能看到完整的一问一答。
         chatSessionService.saveAssistantMessage(username, session.sessionId(), response.answer(), response.model());
         return ApiResponse.success(response);
-    }
-
-    private String currentUsername(Authentication authentication) {
-        return authentication.getName();
     }
 }

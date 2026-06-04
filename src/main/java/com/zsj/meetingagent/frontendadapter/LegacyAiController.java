@@ -1,6 +1,7 @@
 package com.zsj.meetingagent.frontendadapter;
 
 import com.zsj.meetingagent.ai.config.AiModelProperties;
+import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.chat.dto.ChatStreamRequest;
 import com.zsj.meetingagent.chat.dto.LegacyChatStreamRequest;
 import com.zsj.meetingagent.chat.service.ChatSessionService;
@@ -13,7 +14,6 @@ import com.zsj.meetingagent.common.result.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -76,10 +76,9 @@ public class LegacyAiController {
     @GetMapping("/ai/conversations")
     public ApiResponse<LegacyPageResponse<Map<String, Object>>> listConversations(
             @RequestParam(defaultValue = "1") long current,
-            @RequestParam(defaultValue = "10") long size,
-            Authentication authentication
+            @RequestParam(defaultValue = "10") long size
     ) {
-        String username = authentication.getName();
+        String username = LoginUserContext.currentUsername();
         List<Map<String, Object>> records = chatSessionService.listSessions(username, current, size)
                 .stream()
                 .map(this::toLegacyConversationRecord)
@@ -89,17 +88,16 @@ public class LegacyAiController {
 
     @PostMapping("/ai/conversations")
     public ApiResponse<LegacyConversationResponse> createConversation(
-            @RequestBody Map<String, Object> request,
-            Authentication authentication
+            @RequestBody Map<String, Object> request
     ) {
         String firstMessage = String.valueOf(request.getOrDefault("firstMessage", ""));
-        ChatSessionResponse session = chatSessionService.createSession(authentication.getName(), firstMessage, aiModelProperties.getDefaultModel());
+        ChatSessionResponse session = chatSessionService.createSession(LoginUserContext.currentUsername(), firstMessage, aiModelProperties.getDefaultModel());
         return ApiResponse.success(new LegacyConversationResponse(session.sessionId(), session.title()));
     }
 
     @GetMapping("/ai/history/{sessionId}")
-    public ApiResponse<List<Map<String, Object>>> listHistory(@PathVariable String sessionId, Authentication authentication) {
-        return ApiResponse.success(chatSessionService.listMessages(authentication.getName(), sessionId)
+    public ApiResponse<List<Map<String, Object>>> listHistory(@PathVariable String sessionId) {
+        return ApiResponse.success(chatSessionService.listMessages(LoginUserContext.currentUsername(), sessionId)
                 .stream()
                 .map(this::toLegacyMessageRecord)
                 .toList());
@@ -109,13 +107,12 @@ public class LegacyAiController {
     public ApiResponse<LegacyPageResponse<Map<String, Object>>> pageHistory(
             @RequestParam(required = false) String sessionId,
             @RequestParam(defaultValue = "1") long current,
-            @RequestParam(defaultValue = "20") long size,
-            Authentication authentication
+            @RequestParam(defaultValue = "20") long size
     ) {
         if (sessionId == null || sessionId.isBlank()) {
             return ApiResponse.success(LegacyPageResponse.empty(current, size));
         }
-        List<Map<String, Object>> records = chatSessionService.listMessages(authentication.getName(), sessionId)
+        List<Map<String, Object>> records = chatSessionService.listMessages(LoginUserContext.currentUsername(), sessionId)
                 .stream()
                 .map(this::toLegacyMessageRecord)
                 .toList();
@@ -126,8 +123,7 @@ public class LegacyAiController {
     public SseEmitter streamChat(
             @PathVariable String sessionId,
             @RequestParam(required = false) String username,
-            @Valid @RequestBody LegacyChatStreamRequest request,
-            Authentication authentication
+            @Valid @RequestBody LegacyChatStreamRequest request
     ) {
         ChatStreamRequest chatRequest = new ChatStreamRequest(
                 request.inputMessage(),
@@ -136,7 +132,7 @@ public class LegacyAiController {
                 null,
                 null
         );
-        return chatStreamService.stream(chatRequest, authentication.getName());
+        return chatStreamService.stream(chatRequest, LoginUserContext.currentUsername());
     }
 
     private Map<String, Object> toLegacyConversationRecord(ChatSessionResponse session) {

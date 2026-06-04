@@ -1,12 +1,12 @@
 package com.zsj.meetingagent.chat.controller;
 
+import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.chat.dto.CreateChatSessionRequest;
 import com.zsj.meetingagent.chat.service.ChatSessionService;
 import com.zsj.meetingagent.chat.vo.ChatMessageResponse;
 import com.zsj.meetingagent.chat.vo.ChatSessionResponse;
 import com.zsj.meetingagent.common.result.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,11 +34,10 @@ public class ChatSessionController {
 
     @PostMapping
     public ApiResponse<ChatSessionResponse> createSession(
-            @Valid @RequestBody CreateChatSessionRequest request,
-            Authentication authentication
+            @Valid @RequestBody CreateChatSessionRequest request
     ) {
         return ApiResponse.success(chatSessionService.createSession(
-                authentication.getName(),
+                LoginUserContext.currentUsername(),
                 request.firstMessage(),
                 request.model()
         ));
@@ -47,17 +46,15 @@ public class ChatSessionController {
     @GetMapping
     public ApiResponse<List<ChatSessionResponse>> listSessions(
             @RequestParam(defaultValue = "1") long current,
-            @RequestParam(defaultValue = "20") long size,
-            Authentication authentication
+            @RequestParam(defaultValue = "20") long size
     ) {
-        return ApiResponse.success(chatSessionService.listSessions(authentication.getName(), current, size));
+        return ApiResponse.success(chatSessionService.listSessions(LoginUserContext.currentUsername(), current, size));
     }
 
     @GetMapping("/{sessionId}/messages")
     public ApiResponse<List<ChatMessageResponse>> listMessages(
-            @PathVariable String sessionId,
-            Authentication authentication
+            @PathVariable String sessionId
     ) {
-        return ApiResponse.success(chatSessionService.listMessages(authentication.getName(), sessionId));
+        return ApiResponse.success(chatSessionService.listMessages(LoginUserContext.currentUsername(), sessionId));
     }
 }

@@ -10,7 +10,7 @@ import java.util.Optional;
 
 /**
  * MySQL 用户仓储实现。
- * 当前默认使用 users 表持久化注册用户，后端重启后仍能通过 JWT 中的用户名查回账号。
+ * 当前默认使用 users 表持久化注册用户，后端重启后仍能通过 Sa-Token 登录态中的用户名查回账号。
  */
 @Primary
 @Repository

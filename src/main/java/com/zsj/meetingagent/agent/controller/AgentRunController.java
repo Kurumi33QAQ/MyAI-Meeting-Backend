@@ -1,11 +1,11 @@
 package com.zsj.meetingagent.agent.controller;
 
+import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.agent.dto.AgentRunRequest;
 import com.zsj.meetingagent.agent.service.AgentRunService;
 import com.zsj.meetingagent.agent.vo.AgentRunResponse;
 import com.zsj.meetingagent.common.result.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,12 +28,12 @@ public class AgentRunController {
     }
 
     @PostMapping
-    public ApiResponse<AgentRunResponse> run(@Valid @RequestBody AgentRunRequest request, Authentication authentication) {
-        return ApiResponse.success(agentRunService.run(authentication.getName(), request));
+    public ApiResponse<AgentRunResponse> run(@Valid @RequestBody AgentRunRequest request) {
+        return ApiResponse.success(agentRunService.run(LoginUserContext.currentUsername(), request));
     }
 
     @GetMapping("/{runId}")
-    public ApiResponse<AgentRunResponse> getRun(@PathVariable String runId, Authentication authentication) {
-        return ApiResponse.success(agentRunService.getRun(authentication.getName(), runId));
+    public ApiResponse<AgentRunResponse> getRun(@PathVariable String runId) {
+        return ApiResponse.success(agentRunService.getRun(LoginUserContext.currentUsername(), runId));
     }
 }

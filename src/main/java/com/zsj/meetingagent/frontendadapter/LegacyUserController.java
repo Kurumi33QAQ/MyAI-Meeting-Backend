@@ -2,14 +2,13 @@ package com.zsj.meetingagent.frontendadapter;
 
 import com.zsj.meetingagent.auth.dto.LoginRequest;
 import com.zsj.meetingagent.auth.dto.RegisterRequest;
+import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.auth.service.AuthService;
 import com.zsj.meetingagent.auth.vo.AuthResponse;
 import com.zsj.meetingagent.common.result.ApiResponse;
 import com.zsj.meetingagent.user.service.UserService;
 import com.zsj.meetingagent.user.vo.UserProfileResponse;
 import jakarta.validation.Valid;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 旧前端接口兼容层。
@@ -50,14 +50,16 @@ public class LegacyUserController {
     }
 
     @GetMapping("/check-login")
-    public ApiResponse<Map<String, Object>> checkLogin(Authentication authentication) {
+    public ApiResponse<Map<String, Object>> checkLogin() {
         Map<String, Object> payload = new LinkedHashMap<>();
-        boolean loggedIn = authentication != null
-                && authentication.isAuthenticated()
-                && !(authentication instanceof AnonymousAuthenticationToken);
+        Optional<String> currentUsername = LoginUserContext.tryCurrentUsername();
+        boolean loggedIn = currentUsername.isPresent();
         payload.put("isLogin", loggedIn);
         if (loggedIn) {
-            AuthResponse response = authService.currentUser(authentication.getName());
+            AuthResponse response = authService.currentUser(
+                    currentUsername.get(),
+                    LoginUserContext.currentToken().orElse("")
+            );
             payload.putAll(toLegacyAuthPayload(response, false));
         }
         return ApiResponse.success(payload);
@@ -65,7 +67,7 @@ public class LegacyUserController {
 
     @PostMapping("/logout")
     public ApiResponse<Void> logout() {
-        // 当前还没有 Redis token 黑名单，退出登录先由前端删除 token；服务端失效能力放到后续限流/缓存阶段扩展。
+        authService.logout(LoginUserContext.currentUsername());
         return ApiResponse.success();
     }
 

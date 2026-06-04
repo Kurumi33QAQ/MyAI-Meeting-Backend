@@ -1,5 +1,6 @@
 package com.zsj.meetingagent.common.web;
 
+import com.zsj.meetingagent.common.exception.AuthenticationRequiredException;
 import com.zsj.meetingagent.common.exception.BusinessException;
 import com.zsj.meetingagent.common.result.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
@@ -17,6 +18,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AuthenticationRequiredException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ApiResponse<Void> handleAuthenticationRequired(AuthenticationRequiredException ex) {
+        return ApiResponse.failure(ApiResponse.AUTH_ERROR_CODE, ex.getMessage());
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException ex) {
@@ -63,6 +70,14 @@ public class GlobalExceptionHandler {
             case "model" -> "模型";
             case "temperature" -> "温度";
             case "sessionId" -> "会话";
+            case "fileName" -> "文件名";
+            case "content" -> "内容";
+            case "resumeId" -> "简历";
+            case "jobTitle" -> "岗位名称";
+            case "jobDescription" -> "岗位描述";
+            case "questionCount" -> "题目数量";
+            case "questionId" -> "面试题";
+            case "answer" -> "回答";
             default -> field;
         };
     }

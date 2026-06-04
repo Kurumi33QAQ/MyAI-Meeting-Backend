@@ -1,8 +1,10 @@
 package com.zsj.meetingagent.config;
 
+import com.zsj.meetingagent.auth.security.SaTokenAuthInterceptor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
@@ -14,9 +16,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final CorsConfig corsConfig;
+    private final SaTokenAuthInterceptor saTokenAuthInterceptor;
 
-    public WebMvcConfig(CorsConfig corsConfig) {
+    public WebMvcConfig(CorsConfig corsConfig, SaTokenAuthInterceptor saTokenAuthInterceptor) {
         this.corsConfig = corsConfig;
+        this.saTokenAuthInterceptor = saTokenAuthInterceptor;
     }
 
     @Override
@@ -30,5 +34,15 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true);
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        /*
+         * Sa-Token 认证统一在 MVC 拦截器中完成。
+         * Controller 只读取 LoginUserContext，不需要关心 token 来自 Header 还是后续 WebSocket 参数。
+         */
+        registry.addInterceptor(saTokenAuthInterceptor)
+                .addPathPatterns("/api/**");
     }
 }
