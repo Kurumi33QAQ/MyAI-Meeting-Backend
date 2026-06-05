@@ -7,6 +7,7 @@ import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.agent.vo.AgentStepResponse;
 import jakarta.validation.Valid;
@@ -66,5 +67,15 @@ public class InterviewController {
     @GetMapping("/api/interview-sessions/{sessionId}/agent-traces")
     public ApiResponse<List<AgentStepResponse>> listAgentTraces(@PathVariable String sessionId) {
         return ApiResponse.success(interviewService.listAgentTraces(LoginUserContext.currentUsername(), sessionId));
+    }
+
+    @GetMapping("/api/interview-sessions/{sessionId}/runtime-state")
+    public ApiResponse<InterviewRuntimeStateResponse> getRuntimeState(@PathVariable String sessionId) {
+        return ApiResponse.success(interviewService.getRuntimeState(LoginUserContext.currentUsername(), sessionId));
+    }
+
+    @PostMapping("/api/interview-sessions/{sessionId}/recover")
+    public ApiResponse<InterviewRuntimeStateResponse> recoverRuntimeState(@PathVariable String sessionId) {
+        return ApiResponse.success(interviewService.recoverRuntimeState(LoginUserContext.currentUsername(), sessionId));
     }
 }

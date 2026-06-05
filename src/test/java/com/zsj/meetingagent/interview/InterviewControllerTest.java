@@ -7,7 +7,9 @@ import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
+import com.zsj.meetingagent.interview.runtime.InterviewRuntimeRestoreSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -102,6 +104,10 @@ class InterviewControllerTest {
                 .thenReturn(new InterviewReportResponse("session-1", InterviewSessionStatus.COMPLETED, 90, 1, 1, "整体表现较好", List.of(question)));
         when(interviewService.listAgentTraces(anyString(), anyString()))
                 .thenReturn(List.of(new AgentStepResponse(AgentStepType.OBSERVATION, 1, "简历分析 Agent", "发现 Java 项目经历", now)));
+        when(interviewService.getRuntimeState(anyString(), anyString()))
+                .thenReturn(new InterviewRuntimeStateResponse("session-1", InterviewSessionStatus.ANSWERING, 1, 0, 1, null, 2, InterviewRuntimeRestoreSource.HOT_REDIS, now));
+        when(interviewService.recoverRuntimeState(anyString(), anyString()))
+                .thenReturn(new InterviewRuntimeStateResponse("session-1", InterviewSessionStatus.ANSWERING, 1, 0, 1, null, 2, InterviewRuntimeRestoreSource.COLD_MONGO, now));
 
         mockMvc.perform(post("/api/interview-sessions")
                         .header("Authorization", "Bearer " + token)
@@ -145,6 +151,16 @@ class InterviewControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].toolName").value("简历分析 Agent"));
+
+        mockMvc.perform(get("/api/interview-sessions/session-1/runtime-state")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.restoreSource").value("HOT_REDIS"));
+
+        mockMvc.perform(post("/api/interview-sessions/session-1/recover")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.restoreSource").value("COLD_MONGO"));
     }
 
     @Test

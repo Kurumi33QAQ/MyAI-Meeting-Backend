@@ -4,6 +4,7 @@ import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.agent.vo.AgentStepResponse;
 
@@ -28,4 +29,8 @@ public interface InterviewService {
     InterviewReportResponse getReport(String username, String sessionId);
 
     List<AgentStepResponse> listAgentTraces(String username, String sessionId);
+
+    InterviewRuntimeStateResponse getRuntimeState(String username, String sessionId);
+
+    InterviewRuntimeStateResponse recoverRuntimeState(String username, String sessionId);
 }

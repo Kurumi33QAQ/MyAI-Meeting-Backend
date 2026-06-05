@@ -9,7 +9,7 @@ import java.time.Instant;
 
 /**
  * 面试运行快照 MongoDB 文档。
- * 记录创建会话、生成题目、提交回答、生成报告等关键步骤，延续 Agent 可追踪设计。
+ * 同时保存步骤日志和可恢复运行态，Redis 热态丢失后可以从这里恢复面试进度。
  */
 @Document(collection = "interview_runtime_snapshot")
 @CompoundIndex(name = "idx_interview_runtime_session_time", def = "{'sessionId': 1, 'createdAt': 1}")
@@ -27,6 +27,24 @@ public class InterviewRuntimeSnapshotDocument {
     private String stepType;
 
     private String content;
+
+    private String status;
+
+    private int currentQuestionIndex;
+
+    private int answeredCount;
+
+    private int questionCount;
+
+    private Integer totalScore;
+
+    /**
+     * 运行态版本号。
+     * 每次关键状态变化递增，后续做 CAS 或排查旧状态覆盖新状态时可以用它判断先后顺序。
+     */
+    private long version;
+
+    private String restoreSource;
 
     private Instant createdAt;
 
@@ -68,6 +86,62 @@ public class InterviewRuntimeSnapshotDocument {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public int getCurrentQuestionIndex() {
+        return currentQuestionIndex;
+    }
+
+    public void setCurrentQuestionIndex(int currentQuestionIndex) {
+        this.currentQuestionIndex = currentQuestionIndex;
+    }
+
+    public int getAnsweredCount() {
+        return answeredCount;
+    }
+
+    public void setAnsweredCount(int answeredCount) {
+        this.answeredCount = answeredCount;
+    }
+
+    public int getQuestionCount() {
+        return questionCount;
+    }
+
+    public void setQuestionCount(int questionCount) {
+        this.questionCount = questionCount;
+    }
+
+    public Integer getTotalScore() {
+        return totalScore;
+    }
+
+    public void setTotalScore(Integer totalScore) {
+        this.totalScore = totalScore;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public void setVersion(long version) {
+        this.version = version;
+    }
+
+    public String getRestoreSource() {
+        return restoreSource;
+    }
+
+    public void setRestoreSource(String restoreSource) {
+        this.restoreSource = restoreSource;
     }
 
     public Instant getCreatedAt() {

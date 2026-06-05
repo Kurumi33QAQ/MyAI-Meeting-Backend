@@ -16,13 +16,14 @@ import com.zsj.meetingagent.interview.enums.InterviewSessionStatus;
 import com.zsj.meetingagent.interview.mapper.InterviewRecordMapper;
 import com.zsj.meetingagent.interview.prompt.InterviewPromptBuilder;
 import com.zsj.meetingagent.interview.repository.InterviewQuestionSnapshotRepository;
-import com.zsj.meetingagent.interview.repository.InterviewRuntimeSnapshotRepository;
 import com.zsj.meetingagent.interview.repository.InterviewSessionRepository;
 import com.zsj.meetingagent.interview.rule.FollowUpDecision;
 import com.zsj.meetingagent.interview.rule.FollowUpDecisionService;
 import com.zsj.meetingagent.interview.rule.FollowUpRuleTrace;
+import com.zsj.meetingagent.interview.runtime.InterviewRuntimeService;
 import com.zsj.meetingagent.interview.service.impl.DefaultInterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
 import com.zsj.meetingagent.rag.service.RetrievalService;
@@ -65,7 +66,7 @@ class DefaultInterviewServiceTest {
     private InterviewQuestionSnapshotRepository questionRepository;
 
     @Mock
-    private InterviewRuntimeSnapshotRepository runtimeRepository;
+    private InterviewRuntimeService runtimeService;
 
     @Mock
     private KnowledgeIngestionService knowledgeIngestionService;
@@ -115,7 +116,7 @@ class DefaultInterviewServiceTest {
         });
         when(interviewRecordMapper.insert(any())).thenReturn(1);
         when(interviewRecordMapper.updateProgress(any())).thenReturn(1);
-        when(runtimeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(runtimeService.recordSnapshot(any(), any(), anyString(), anyString())).thenReturn(null);
         when(retrievalService.retrieveForInterview(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(List.of());
         when(interviewOrchestrator.designQuestions(any())).thenReturn(new InterviewOrchestrationResult(
@@ -147,7 +148,7 @@ class DefaultInterviewServiceTest {
                 interviewRecordMapper,
                 sessionRepository,
                 questionRepository,
-                runtimeRepository,
+                runtimeService,
                 knowledgeIngestionService,
                 retrievalService,
                 interviewOrchestrator,
@@ -175,6 +176,42 @@ class DefaultInterviewServiceTest {
         assertThat(answer.followUpRuleTrace()).contains("缺失考点判断节点");
         assertThat(service.getReport("alice", created.sessionId()).totalScore()).isGreaterThanOrEqualTo(90);
         assertThat(questionCaptor.getValue().getUserAnswer()).contains("Spring Boot");
+    }
+
+    @Test
+    void runtimeStateIsDelegatedToRuntimeService() {
+        DefaultInterviewService service = new DefaultInterviewService(
+                resumeService,
+                aiChatService,
+                testAiModelProperties(),
+                new InterviewPromptBuilder(),
+                interviewRecordMapper,
+                sessionRepository,
+                questionRepository,
+                runtimeService,
+                knowledgeIngestionService,
+                retrievalService,
+                interviewOrchestrator,
+                followUpDecisionService
+        );
+        when(runtimeService.recover(anyString(), anyString())).thenReturn(new com.zsj.meetingagent.interview.runtime.InterviewRuntimeState(
+                "session-1",
+                "alice",
+                InterviewSessionStatus.ANSWERING,
+                2,
+                1,
+                3,
+                null,
+                4,
+                com.zsj.meetingagent.interview.runtime.InterviewRuntimeRestoreSource.COLD_MONGO,
+                Instant.now()
+        ));
+
+        InterviewRuntimeStateResponse response = service.getRuntimeState("alice", "session-1");
+
+        assertThat(response.sessionId()).isEqualTo("session-1");
+        assertThat(response.restoreSource().name()).isEqualTo("COLD_MONGO");
+        assertThat(response.currentQuestionIndex()).isEqualTo(2);
     }
 
     private AiModelProperties testAiModelProperties() {

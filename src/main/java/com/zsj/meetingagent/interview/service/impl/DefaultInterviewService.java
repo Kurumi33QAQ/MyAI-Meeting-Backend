@@ -12,21 +12,22 @@ import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.entity.InterviewQuestionSnapshotDocument;
 import com.zsj.meetingagent.interview.entity.InterviewRecord;
-import com.zsj.meetingagent.interview.entity.InterviewRuntimeSnapshotDocument;
 import com.zsj.meetingagent.interview.entity.InterviewSessionDocument;
 import com.zsj.meetingagent.interview.enums.InterviewSessionStatus;
 import com.zsj.meetingagent.interview.mapper.InterviewRecordMapper;
 import com.zsj.meetingagent.interview.prompt.InterviewPromptBuilder;
 import com.zsj.meetingagent.interview.repository.InterviewQuestionSnapshotRepository;
-import com.zsj.meetingagent.interview.repository.InterviewRuntimeSnapshotRepository;
 import com.zsj.meetingagent.interview.repository.InterviewSessionRepository;
 import com.zsj.meetingagent.interview.rule.FollowUpDecision;
 import com.zsj.meetingagent.interview.rule.FollowUpDecisionService;
 import com.zsj.meetingagent.interview.rule.FollowUpRuleContext;
+import com.zsj.meetingagent.interview.runtime.InterviewRuntimeService;
+import com.zsj.meetingagent.interview.runtime.InterviewRuntimeState;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
 import com.zsj.meetingagent.rag.service.RetrievalService;
@@ -63,7 +64,7 @@ public class DefaultInterviewService implements InterviewService {
     private final InterviewRecordMapper interviewRecordMapper;
     private final InterviewSessionRepository sessionRepository;
     private final InterviewQuestionSnapshotRepository questionRepository;
-    private final InterviewRuntimeSnapshotRepository runtimeRepository;
+    private final InterviewRuntimeService runtimeService;
     private final KnowledgeIngestionService knowledgeIngestionService;
     private final RetrievalService retrievalService;
     private final AiModelProperties aiModelProperties;
@@ -78,7 +79,7 @@ public class DefaultInterviewService implements InterviewService {
             InterviewRecordMapper interviewRecordMapper,
             InterviewSessionRepository sessionRepository,
             InterviewQuestionSnapshotRepository questionRepository,
-            InterviewRuntimeSnapshotRepository runtimeRepository,
+            InterviewRuntimeService runtimeService,
             KnowledgeIngestionService knowledgeIngestionService,
             RetrievalService retrievalService,
             InterviewOrchestrator interviewOrchestrator,
@@ -91,7 +92,7 @@ public class DefaultInterviewService implements InterviewService {
         this.interviewRecordMapper = interviewRecordMapper;
         this.sessionRepository = sessionRepository;
         this.questionRepository = questionRepository;
-        this.runtimeRepository = runtimeRepository;
+        this.runtimeService = runtimeService;
         this.knowledgeIngestionService = knowledgeIngestionService;
         this.retrievalService = retrievalService;
         this.interviewOrchestrator = interviewOrchestrator;
@@ -154,7 +155,7 @@ public class DefaultInterviewService implements InterviewService {
                 request.companyName(),
                 request.jobDescription()
         );
-        saveRuntime(sessionId, username, "CREATE_SESSION", "创建模拟面试会话，目标岗位：" + request.jobTitle().trim());
+        saveRuntime(session, "CREATE_SESSION", "创建模拟面试会话，目标岗位：" + request.jobTitle().trim());
         return toSessionResponse(session, List.of());
     }
 
@@ -166,6 +167,7 @@ public class DefaultInterviewService implements InterviewService {
         }
         List<InterviewQuestionSnapshotDocument> existing = listQuestionDocuments(username, sessionId);
         if (!existing.isEmpty()) {
+            runtimeService.recordSnapshot(session, existing, "GENERATE_QUESTIONS_REUSE", "复用已生成的面试题，不重复生成");
             return toSessionResponse(session, existing);
         }
 
@@ -196,8 +198,8 @@ public class DefaultInterviewService implements InterviewService {
                 INTERVIEW_SYSTEM_PROMPT,
                 null
         )).answer();
-        saveRuntime(sessionId, username, "GENERATE_QUESTIONS_AI_CONTEXT", shorten(aiSuggestion, 500));
-        saveRuntime(sessionId, username, "RAG_EVIDENCE", buildEvidenceRuntimeSummary(evidenceList));
+        saveRuntime(session, "GENERATE_QUESTIONS_AI_CONTEXT", shorten(aiSuggestion, 500));
+        saveRuntime(session, "RAG_EVIDENCE", buildEvidenceRuntimeSummary(evidenceList));
 
         InterviewOrchestrationResult orchestrationResult = interviewOrchestrator.designQuestions(new InterviewOrchestrationContext(
                 username,
@@ -210,7 +212,7 @@ public class DefaultInterviewService implements InterviewService {
                 evidenceList,
                 aiSuggestion
         ));
-        saveRuntime(sessionId, username, "MULTI_AGENT_ORCHESTRATION", orchestrationResult.traceSummary());
+        saveRuntime(session, "MULTI_AGENT_ORCHESTRATION", orchestrationResult.traceSummary());
 
         List<InterviewQuestionSnapshotDocument> questions = buildQuestions(session, orchestrationResult);
         questionRepository.saveAll(questions);
@@ -219,7 +221,7 @@ public class DefaultInterviewService implements InterviewService {
         session.setUpdatedAt(Instant.now());
         sessionRepository.save(session);
         updateRecord(session);
-        saveRuntime(sessionId, username, "GENERATE_QUESTIONS", "生成面试题数量：" + questions.size());
+        saveRuntime(session, "GENERATE_QUESTIONS", "生成面试题数量：" + questions.size());
         return toSessionResponse(session, questions);
     }
 
@@ -293,8 +295,8 @@ public class DefaultInterviewService implements InterviewService {
         session.setUpdatedAt(Instant.now());
         sessionRepository.save(session);
         updateRecord(session);
-        saveRuntime(sessionId, username, "SUBMIT_ANSWER", "提交第 " + question.getQuestionOrder() + " 题，评分：" + score);
-        saveRuntime(sessionId, username, "FOLLOW_UP_RULE_TRACE", followUpDecision.traceSummary());
+        saveRuntime(session, "SUBMIT_ANSWER", "提交第 " + question.getQuestionOrder() + " 题，评分：" + score);
+        saveRuntime(session, "FOLLOW_UP_RULE_TRACE", followUpDecision.traceSummary());
 
         return new InterviewAnswerResponse(
                 sessionId,
@@ -312,6 +314,7 @@ public class DefaultInterviewService implements InterviewService {
     @Override
     public InterviewSessionResponse getSession(String username, String sessionId) {
         InterviewSessionDocument session = findSession(username, sessionId);
+        runtimeService.recover(username, sessionId);
         return toSessionResponse(session, listQuestionDocuments(username, sessionId));
     }
 
@@ -337,6 +340,16 @@ public class DefaultInterviewService implements InterviewService {
     public List<AgentStepResponse> listAgentTraces(String username, String sessionId) {
         findSession(username, sessionId);
         return interviewOrchestrator.listTraces(username, sessionId);
+    }
+
+    @Override
+    public InterviewRuntimeStateResponse getRuntimeState(String username, String sessionId) {
+        return toRuntimeStateResponse(runtimeService.recover(username, sessionId));
+    }
+
+    @Override
+    public InterviewRuntimeStateResponse recoverRuntimeState(String username, String sessionId) {
+        return toRuntimeStateResponse(runtimeService.recover(username, sessionId));
     }
 
     private InterviewSessionDocument findSession(String username, String sessionId) {
@@ -477,14 +490,12 @@ public class DefaultInterviewService implements InterviewService {
         ));
     }
 
-    private void saveRuntime(String sessionId, String username, String stepType, String content) {
-        InterviewRuntimeSnapshotDocument snapshot = new InterviewRuntimeSnapshotDocument();
-        snapshot.setSessionId(sessionId);
-        snapshot.setUsername(username);
-        snapshot.setStepType(stepType);
-        snapshot.setContent(content);
-        snapshot.setCreatedAt(Instant.now());
-        runtimeRepository.save(snapshot);
+    private void saveRuntime(InterviewSessionDocument session, String stepType, String content) {
+        /*
+         * 每个关键步骤都同时刷新 Redis 热态和 MongoDB 冷快照。
+         * 这样页面刷新优先走 Redis，Redis 丢失时仍能从 MongoDB 找回最新进度。
+         */
+        runtimeService.recordSnapshot(session, listQuestionDocuments(session.getUsername(), session.getSessionId()), stepType, content);
     }
 
     private List<InterviewQuestionSnapshotDocument> listQuestionDocuments(String username, String sessionId) {
@@ -527,6 +538,20 @@ public class DefaultInterviewService implements InterviewService {
                 question.getFollowUpRuleTrace(),
                 question.getCreatedAt(),
                 question.getAnsweredAt()
+        );
+    }
+
+    private InterviewRuntimeStateResponse toRuntimeStateResponse(InterviewRuntimeState state) {
+        return new InterviewRuntimeStateResponse(
+                state.sessionId(),
+                state.status(),
+                state.currentQuestionIndex(),
+                state.answeredCount(),
+                state.questionCount(),
+                state.totalScore(),
+                state.version(),
+                state.restoreSource(),
+                state.updatedAt()
         );
     }
 
