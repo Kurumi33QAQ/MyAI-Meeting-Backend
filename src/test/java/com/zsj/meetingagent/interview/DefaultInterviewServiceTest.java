@@ -4,6 +4,10 @@ import com.zsj.meetingagent.ai.dto.AiChatRequest;
 import com.zsj.meetingagent.ai.config.AiModelProperties;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.ai.vo.AiChatResponse;
+import com.zsj.meetingagent.agent.model.InterviewAgentOutput;
+import com.zsj.meetingagent.agent.model.InterviewAgentQuestion;
+import com.zsj.meetingagent.agent.model.InterviewOrchestrationResult;
+import com.zsj.meetingagent.agent.orchestrator.InterviewOrchestrator;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.entity.InterviewQuestionSnapshotDocument;
@@ -35,6 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -64,6 +69,9 @@ class DefaultInterviewServiceTest {
 
     @Mock
     private RetrievalService retrievalService;
+
+    @Mock
+    private InterviewOrchestrator interviewOrchestrator;
 
     @Test
     void createGenerateAnswerAndReport() {
@@ -104,7 +112,21 @@ class DefaultInterviewServiceTest {
         when(runtimeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(retrievalService.retrieveForInterview(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(List.of());
-
+        when(interviewOrchestrator.designQuestions(any())).thenReturn(new InterviewOrchestrationResult(
+                "agent-run-1",
+                List.of(new InterviewAgentOutput("简历分析 Agent", "发现 Java 项目经历", "适合追问项目真实性")),
+                List.of(new InterviewAgentQuestion(
+                        "请介绍一个 Java 后端项目",
+                        "应包含背景、职责、方案和结果。",
+                        "项目理解、技术细节、表达结构",
+                        "追问技术细节",
+                        List.of("evidence-1"),
+                        "项目经历：Spring Boot 接口开发"
+                )),
+                "多 Agent 出题完成"
+        ));
+        when(interviewOrchestrator.reviewAnswer(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString()))
+                .thenReturn(new InterviewAgentOutput("回答评估 Agent", "回答质量较好，得分：90", "命中项目和技术细节"));
         DefaultInterviewService service = new DefaultInterviewService(
                 resumeService,
                 aiChatService,
@@ -115,7 +137,8 @@ class DefaultInterviewServiceTest {
                 questionRepository,
                 runtimeRepository,
                 knowledgeIngestionService,
-                retrievalService
+                retrievalService,
+                interviewOrchestrator
         );
 
         InterviewSessionResponse created = service.createSession("alice", new CreateInterviewSessionRequest(
@@ -133,6 +156,7 @@ class DefaultInterviewServiceTest {
 
         assertThat(created.status()).isEqualTo(InterviewSessionStatus.CREATED);
         assertThat(generated.questions()).hasSize(1);
+        assertThat(generated.questions().getFirst().agentRunId()).isEqualTo("agent-run-1");
         assertThat(answer.status()).isEqualTo(InterviewSessionStatus.COMPLETED);
         assertThat(answer.score()).isGreaterThanOrEqualTo(90);
         assertThat(service.getReport("alice", created.sessionId()).totalScore()).isGreaterThanOrEqualTo(90);

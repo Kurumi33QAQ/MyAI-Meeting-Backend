@@ -3,6 +3,10 @@ package com.zsj.meetingagent.interview.service.impl;
 import com.zsj.meetingagent.ai.dto.AiChatRequest;
 import com.zsj.meetingagent.ai.config.AiModelProperties;
 import com.zsj.meetingagent.ai.service.AiChatService;
+import com.zsj.meetingagent.agent.model.InterviewAgentQuestion;
+import com.zsj.meetingagent.agent.model.InterviewOrchestrationContext;
+import com.zsj.meetingagent.agent.model.InterviewOrchestrationResult;
+import com.zsj.meetingagent.agent.orchestrator.InterviewOrchestrator;
 import com.zsj.meetingagent.common.exception.BusinessException;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
@@ -26,6 +30,7 @@ import com.zsj.meetingagent.rag.service.RetrievalService;
 import com.zsj.meetingagent.rag.vo.EvidenceResponse;
 import com.zsj.meetingagent.resume.service.ResumeService;
 import com.zsj.meetingagent.resume.vo.ResumeResponse;
+import com.zsj.meetingagent.agent.vo.AgentStepResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -59,6 +64,7 @@ public class DefaultInterviewService implements InterviewService {
     private final KnowledgeIngestionService knowledgeIngestionService;
     private final RetrievalService retrievalService;
     private final AiModelProperties aiModelProperties;
+    private final InterviewOrchestrator interviewOrchestrator;
 
     public DefaultInterviewService(
             ResumeService resumeService,
@@ -70,7 +76,8 @@ public class DefaultInterviewService implements InterviewService {
             InterviewQuestionSnapshotRepository questionRepository,
             InterviewRuntimeSnapshotRepository runtimeRepository,
             KnowledgeIngestionService knowledgeIngestionService,
-            RetrievalService retrievalService
+            RetrievalService retrievalService,
+            InterviewOrchestrator interviewOrchestrator
     ) {
         this.resumeService = resumeService;
         this.aiChatService = aiChatService;
@@ -82,6 +89,7 @@ public class DefaultInterviewService implements InterviewService {
         this.runtimeRepository = runtimeRepository;
         this.knowledgeIngestionService = knowledgeIngestionService;
         this.retrievalService = retrievalService;
+        this.interviewOrchestrator = interviewOrchestrator;
     }
 
     @Override
@@ -166,9 +174,7 @@ public class DefaultInterviewService implements InterviewService {
         );
         /*
          * AI 调用前先做 RAG 检索，把简历/JD 证据塞进 Prompt。
-         * 当前题目结构仍由后端规则生成，保证自动化测试和前端联调稳定。
-         * AI 调用的结果先作为生成题目的参考说明保存到运行快照。
-         * 当前题目结构仍由后端规则生成，保证自动化测试和前端联调稳定。
+         * AI 建议不会直接覆盖后端题目结构，而是作为多 Agent 编排上下文的一部分。
          */
         String aiSuggestion = aiChatService.chat(new AiChatRequest(
                 promptBuilder.buildQuestionPrompt(
@@ -187,7 +193,20 @@ public class DefaultInterviewService implements InterviewService {
         saveRuntime(sessionId, username, "GENERATE_QUESTIONS_AI_CONTEXT", shorten(aiSuggestion, 500));
         saveRuntime(sessionId, username, "RAG_EVIDENCE", buildEvidenceRuntimeSummary(evidenceList));
 
-        List<InterviewQuestionSnapshotDocument> questions = buildQuestions(session, evidenceList);
+        InterviewOrchestrationResult orchestrationResult = interviewOrchestrator.designQuestions(new InterviewOrchestrationContext(
+                username,
+                session.getSessionId(),
+                resume,
+                session.getJobTitle(),
+                session.getCompanyName(),
+                session.getJobDescription(),
+                session.getQuestionCount(),
+                evidenceList,
+                aiSuggestion
+        ));
+        saveRuntime(sessionId, username, "MULTI_AGENT_ORCHESTRATION", orchestrationResult.traceSummary());
+
+        List<InterviewQuestionSnapshotDocument> questions = buildQuestions(session, orchestrationResult);
         questionRepository.saveAll(questions);
 
         session.setStatus(InterviewSessionStatus.QUESTION_GENERATED);
@@ -224,10 +243,18 @@ public class DefaultInterviewService implements InterviewService {
                 INTERVIEW_SYSTEM_PROMPT,
                 null
         )).answer();
+        var reviewOutput = interviewOrchestrator.reviewAnswer(
+                username,
+                sessionId,
+                question.getQuestion(),
+                request.answer(),
+                score,
+                aiFeedback
+        );
 
         question.setUserAnswer(request.answer().trim());
         question.setScore(score);
-        question.setFeedback(heuristicFeedback + " AI 建议：" + shorten(aiFeedback, 220));
+        question.setFeedback(heuristicFeedback + " AI 建议：" + shorten(aiFeedback, 220) + " 多 Agent 观察：" + reviewOutput.summary());
         question.setFollowUpQuestion(buildFollowUpQuestion(score, question));
         question.setAnsweredAt(Instant.now());
         questionRepository.save(question);
@@ -283,6 +310,12 @@ public class DefaultInterviewService implements InterviewService {
         );
     }
 
+    @Override
+    public List<AgentStepResponse> listAgentTraces(String username, String sessionId) {
+        findSession(username, sessionId);
+        return interviewOrchestrator.listTraces(username, sessionId);
+    }
+
     private InterviewSessionDocument findSession(String username, String sessionId) {
         if (!StringUtils.hasText(sessionId)) {
             throw new BusinessException("I0401", "面试会话不能为空");
@@ -313,33 +346,24 @@ public class DefaultInterviewService implements InterviewService {
         }
     }
 
-    private List<InterviewQuestionSnapshotDocument> buildQuestions(InterviewSessionDocument session, List<EvidenceResponse> evidenceList) {
-        List<String> templates = List.of(
-                "请结合你的简历，介绍一个最能体现 %s 能力的项目。",
-                "你在项目中如何使用 Spring Boot、MySQL 或 Redis 解决实际问题？",
-                "如果让你优化一个接口响应时间，你会从哪些后端指标和代码路径入手？",
-                "请讲一次你定位 Bug 或排查线上问题的过程。",
-                "请说明你如何理解数据库事务、索引和慢查询优化。",
-                "如果团队要求你设计一个可扩展的 AI 面试模块，你会如何拆分后端服务？",
-                "你如何保证接口安全、参数校验和错误提示的用户体验？",
-                "请说明你在项目中做过的性能、稳定性或可维护性改进。",
-                "面对不熟悉的业务需求，你会如何拆解任务并验证结果？",
-                "请总结你相对目标岗位的优势和还需要补强的地方。"
-        );
+    private List<InterviewQuestionSnapshotDocument> buildQuestions(InterviewSessionDocument session, InterviewOrchestrationResult orchestrationResult) {
         List<InterviewQuestionSnapshotDocument> questions = new ArrayList<>();
         Instant now = Instant.now();
-        for (int index = 0; index < session.getQuestionCount(); index++) {
+        List<InterviewAgentQuestion> questionPlans = orchestrationResult.questions();
+        for (int index = 0; index < questionPlans.size(); index++) {
+            InterviewAgentQuestion plan = questionPlans.get(index);
             InterviewQuestionSnapshotDocument question = new InterviewQuestionSnapshotDocument();
             question.setQuestionId(UUID.randomUUID().toString());
             question.setSessionId(session.getSessionId());
             question.setUsername(session.getUsername());
             question.setQuestionOrder(index + 1);
-            question.setQuestion(templates.get(index % templates.size()).formatted(session.getJobTitle()));
-            question.setReferenceAnswer("回答应包含背景、职责、技术方案、遇到的问题、解决过程和量化结果。");
-            question.setEvaluationPoints("考察 Java 后端基础、项目理解、问题排查、表达结构和结果意识。");
-            question.setFollowUpDirection("根据候选人回答继续追问技术细节、权衡理由和真实贡献。");
-            question.setEvidenceIds(evidenceList.stream().map(EvidenceResponse::evidenceId).toList());
-            question.setEvidenceSummary(buildQuestionEvidenceSummary(evidenceList));
+            question.setQuestion(plan.question());
+            question.setReferenceAnswer(plan.referenceAnswer());
+            question.setEvaluationPoints(plan.evaluationPoints());
+            question.setFollowUpDirection(plan.followUpDirection());
+            question.setEvidenceIds(plan.evidenceIds());
+            question.setEvidenceSummary(plan.evidenceSummary());
+            question.setAgentRunId(orchestrationResult.runId());
             question.setCreatedAt(now);
             questions.add(question);
         }
@@ -475,6 +499,7 @@ public class DefaultInterviewService implements InterviewService {
                 question.getFollowUpDirection(),
                 question.getEvidenceIds() == null ? List.of() : question.getEvidenceIds(),
                 question.getEvidenceSummary(),
+                question.getAgentRunId(),
                 question.getUserAnswer(),
                 question.getScore(),
                 question.getFeedback(),

@@ -1,6 +1,8 @@
 package com.zsj.meetingagent.interview;
 
 import com.zsj.meetingagent.interview.enums.InterviewSessionStatus;
+import com.zsj.meetingagent.agent.enums.AgentStepType;
+import com.zsj.meetingagent.agent.vo.AgentStepResponse;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
@@ -68,6 +70,7 @@ class InterviewControllerTest {
                 "追问技术细节",
                 List.of("evidence-1"),
                 "项目经历：Spring Boot 接口开发",
+                "agent-run-1",
                 null,
                 null,
                 null,
@@ -96,6 +99,8 @@ class InterviewControllerTest {
                 .thenReturn(new InterviewAnswerResponse("session-1", "question-1", 90, "回答较完整", "请补充性能指标", InterviewSessionStatus.COMPLETED, 1, 1));
         when(interviewService.getReport(anyString(), anyString()))
                 .thenReturn(new InterviewReportResponse("session-1", InterviewSessionStatus.COMPLETED, 90, 1, 1, "整体表现较好", List.of(question)));
+        when(interviewService.listAgentTraces(anyString(), anyString()))
+                .thenReturn(List.of(new AgentStepResponse(AgentStepType.OBSERVATION, 1, "简历分析 Agent", "发现 Java 项目经历", now)));
 
         mockMvc.perform(post("/api/interview-sessions")
                         .header("Authorization", "Bearer " + token)
@@ -134,6 +139,11 @@ class InterviewControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalScore").value(90));
+
+        mockMvc.perform(get("/api/interview-sessions/session-1/agent-traces")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].toolName").value("简历分析 Agent"));
     }
 
     @Test

@@ -16,6 +16,7 @@ public record InterviewQuestionResponse(
         String followUpDirection,
         List<String> evidenceIds,
         String evidenceSummary,
+        String agentRunId,
         String userAnswer,
         Integer score,
         String feedback,

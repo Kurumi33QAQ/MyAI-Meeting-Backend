@@ -5,6 +5,9 @@ import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
+import com.zsj.meetingagent.agent.vo.AgentStepResponse;
+
+import java.util.List;
 
 /**
  * 模拟面试服务接口。
@@ -23,4 +26,6 @@ public interface InterviewService {
     InterviewSessionResponse getSession(String username, String sessionId);
 
     InterviewReportResponse getReport(String username, String sessionId);
+
+    List<AgentStepResponse> listAgentTraces(String username, String sessionId);
 }

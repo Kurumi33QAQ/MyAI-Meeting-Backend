@@ -8,6 +8,7 @@ import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
+import com.zsj.meetingagent.agent.vo.AgentStepResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 模拟面试接口控制器。
@@ -58,5 +61,10 @@ public class InterviewController {
     @GetMapping("/api/interviews/{sessionId}/report")
     public ApiResponse<InterviewReportResponse> getReport(@PathVariable String sessionId) {
         return ApiResponse.success(interviewService.getReport(LoginUserContext.currentUsername(), sessionId));
+    }
+
+    @GetMapping("/api/interview-sessions/{sessionId}/agent-traces")
+    public ApiResponse<List<AgentStepResponse>> listAgentTraces(@PathVariable String sessionId) {
+        return ApiResponse.success(interviewService.listAgentTraces(LoginUserContext.currentUsername(), sessionId));
     }
 }

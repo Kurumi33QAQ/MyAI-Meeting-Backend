@@ -39,6 +39,12 @@ public class InterviewQuestionSnapshotDocument {
 
     private String evidenceSummary;
 
+    /**
+     * 多 Agent 出题编排的 runId。
+     * 通过它可以关联 agent_run 和 agent_step_trace，复盘这道题由哪些 Agent 共同生成。
+     */
+    private String agentRunId;
+
     private String userAnswer;
 
     private Integer score;
@@ -129,6 +135,14 @@ public class InterviewQuestionSnapshotDocument {
 
     public void setEvidenceSummary(String evidenceSummary) {
         this.evidenceSummary = evidenceSummary;
+    }
+
+    public String getAgentRunId() {
+        return agentRunId;
+    }
+
+    public void setAgentRunId(String agentRunId) {
+        this.agentRunId = agentRunId;
     }
 
     public String getUserAnswer() {

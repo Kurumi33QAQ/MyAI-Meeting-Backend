@@ -3,6 +3,7 @@ package com.zsj.meetingagent.agent.repository;
 import com.zsj.meetingagent.agent.entity.AgentRunDocument;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -12,4 +13,6 @@ import java.util.Optional;
 public interface AgentRunRepository extends MongoRepository<AgentRunDocument, String> {
 
     Optional<AgentRunDocument> findByRunIdAndUsername(String runId, String username);
+
+    List<AgentRunDocument> findBySessionIdAndUsernameOrderByCreatedAtDesc(String sessionId, String username);
 }
