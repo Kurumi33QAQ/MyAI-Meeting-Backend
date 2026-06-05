@@ -127,6 +127,7 @@ public class LegacyInterviewController {
         payload.put("totalScore", session.totalScore());
         payload.put("feedback", response.feedback());
         payload.put("followUpQuestion", response.followUpQuestion());
+        payload.put("followUpRuleTrace", response.followUpRuleTrace());
         payload.put("status", response.status());
         payload.put("answeredCount", response.answeredCount());
         payload.put("questionCount", response.questionCount());
@@ -338,6 +339,7 @@ public class LegacyInterviewController {
         payload.put("feedback", question.feedback());
         payload.put("isFollowUp", false);
         payload.put("followUpNeeded", question.followUpQuestion() != null);
+        payload.put("followUpRuleTrace", question.followUpRuleTrace());
         payload.put("followUpCount", 0);
         return payload;
     }

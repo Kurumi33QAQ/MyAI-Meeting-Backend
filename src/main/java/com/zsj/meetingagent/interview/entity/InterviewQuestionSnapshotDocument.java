@@ -53,6 +53,12 @@ public class InterviewQuestionSnapshotDocument {
 
     private String followUpQuestion;
 
+    /**
+     * LiteFlow 追问规则链轨迹。
+     * 记录每个规则节点是否命中，方便解释为什么追问或为什么不追问。
+     */
+    private String followUpRuleTrace;
+
     private Instant createdAt;
 
     private Instant answeredAt;
@@ -175,6 +181,14 @@ public class InterviewQuestionSnapshotDocument {
 
     public void setFollowUpQuestion(String followUpQuestion) {
         this.followUpQuestion = followUpQuestion;
+    }
+
+    public String getFollowUpRuleTrace() {
+        return followUpRuleTrace;
+    }
+
+    public void setFollowUpRuleTrace(String followUpRuleTrace) {
+        this.followUpRuleTrace = followUpRuleTrace;
     }
 
     public Instant getCreatedAt() {

@@ -31,6 +31,11 @@ sa-token:
   token-style: uuid
   is-log: false
 
+liteflow:
+  rule-source: classpath:liteflow/follow-up-flow.el.xml
+  print-banner: false
+  print-execution-log: false
+
 app:
   ai:
     provider: openai-compatible

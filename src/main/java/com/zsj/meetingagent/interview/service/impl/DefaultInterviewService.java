@@ -20,6 +20,9 @@ import com.zsj.meetingagent.interview.prompt.InterviewPromptBuilder;
 import com.zsj.meetingagent.interview.repository.InterviewQuestionSnapshotRepository;
 import com.zsj.meetingagent.interview.repository.InterviewRuntimeSnapshotRepository;
 import com.zsj.meetingagent.interview.repository.InterviewSessionRepository;
+import com.zsj.meetingagent.interview.rule.FollowUpDecision;
+import com.zsj.meetingagent.interview.rule.FollowUpDecisionService;
+import com.zsj.meetingagent.interview.rule.FollowUpRuleContext;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
@@ -65,6 +68,7 @@ public class DefaultInterviewService implements InterviewService {
     private final RetrievalService retrievalService;
     private final AiModelProperties aiModelProperties;
     private final InterviewOrchestrator interviewOrchestrator;
+    private final FollowUpDecisionService followUpDecisionService;
 
     public DefaultInterviewService(
             ResumeService resumeService,
@@ -77,7 +81,8 @@ public class DefaultInterviewService implements InterviewService {
             InterviewRuntimeSnapshotRepository runtimeRepository,
             KnowledgeIngestionService knowledgeIngestionService,
             RetrievalService retrievalService,
-            InterviewOrchestrator interviewOrchestrator
+            InterviewOrchestrator interviewOrchestrator,
+            FollowUpDecisionService followUpDecisionService
     ) {
         this.resumeService = resumeService;
         this.aiChatService = aiChatService;
@@ -90,6 +95,7 @@ public class DefaultInterviewService implements InterviewService {
         this.knowledgeIngestionService = knowledgeIngestionService;
         this.retrievalService = retrievalService;
         this.interviewOrchestrator = interviewOrchestrator;
+        this.followUpDecisionService = followUpDecisionService;
     }
 
     @Override
@@ -251,11 +257,26 @@ public class DefaultInterviewService implements InterviewService {
                 score,
                 aiFeedback
         );
+        FollowUpDecision followUpDecision = followUpDecisionService.decide(new FollowUpRuleContext(
+                sessionId,
+                question.getQuestionId(),
+                question.getQuestion(),
+                request.answer(),
+                score,
+                aiFeedback,
+                question.getEvaluationPoints(),
+                question.getFollowUpDirection(),
+                question.getEvidenceIds(),
+                session.getStatus(),
+                existingFollowUpCount(question),
+                1
+        ));
 
         question.setUserAnswer(request.answer().trim());
         question.setScore(score);
         question.setFeedback(heuristicFeedback + " AI 建议：" + shorten(aiFeedback, 220) + " 多 Agent 观察：" + reviewOutput.summary());
-        question.setFollowUpQuestion(buildFollowUpQuestion(score, question));
+        question.setFollowUpQuestion(followUpDecision.followUpQuestion());
+        question.setFollowUpRuleTrace(followUpDecision.traceSummary());
         question.setAnsweredAt(Instant.now());
         questionRepository.save(question);
 
@@ -273,6 +294,7 @@ public class DefaultInterviewService implements InterviewService {
         sessionRepository.save(session);
         updateRecord(session);
         saveRuntime(sessionId, username, "SUBMIT_ANSWER", "提交第 " + question.getQuestionOrder() + " 题，评分：" + score);
+        saveRuntime(sessionId, username, "FOLLOW_UP_RULE_TRACE", followUpDecision.traceSummary());
 
         return new InterviewAnswerResponse(
                 sessionId,
@@ -280,6 +302,7 @@ public class DefaultInterviewService implements InterviewService {
                 score,
                 question.getFeedback(),
                 question.getFollowUpQuestion(),
+                question.getFollowUpRuleTrace(),
                 session.getStatus(),
                 session.getAnsweredCount(),
                 session.getQuestionCount()
@@ -414,11 +437,8 @@ public class DefaultInterviewService implements InterviewService {
         return "回答偏泛，需要补充你的具体职责、技术选型理由、问题定位过程和最终效果。";
     }
 
-    private String buildFollowUpQuestion(int score, InterviewQuestionSnapshotDocument question) {
-        if (score >= 85) {
-            return "如果把这个方案放到更高并发场景，你会优先优化哪里？";
-        }
-        return "你能再补充一个具体技术细节或量化结果，说明这件事确实由你负责吗？";
+    private int existingFollowUpCount(InterviewQuestionSnapshotDocument question) {
+        return StringUtils.hasText(question.getFollowUpQuestion()) ? 1 : 0;
     }
 
     private int calculateAverageScore(String username, String sessionId) {
@@ -504,6 +524,7 @@ public class DefaultInterviewService implements InterviewService {
                 question.getScore(),
                 question.getFeedback(),
                 question.getFollowUpQuestion(),
+                question.getFollowUpRuleTrace(),
                 question.getCreatedAt(),
                 question.getAnsweredAt()
         );

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<flow>
+    <!--
+      模拟面试追问裁决链。
+      节点顺序体现业务含义：先保护状态和次数，再判断低分、缺失考点和 AI 建议，最后统一产出追问决策。
+    -->
+    <chain name="interviewFollowUpChain">
+        THEN(interviewStatusCheckNode, followUpLimitCheckNode, lowScoreCheckNode, missingPointCheckNode, aiSuggestionCheckNode, followUpDecisionNode);
+    </chain>
+</flow>

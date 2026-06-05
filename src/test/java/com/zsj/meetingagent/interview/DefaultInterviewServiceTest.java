@@ -18,6 +18,9 @@ import com.zsj.meetingagent.interview.prompt.InterviewPromptBuilder;
 import com.zsj.meetingagent.interview.repository.InterviewQuestionSnapshotRepository;
 import com.zsj.meetingagent.interview.repository.InterviewRuntimeSnapshotRepository;
 import com.zsj.meetingagent.interview.repository.InterviewSessionRepository;
+import com.zsj.meetingagent.interview.rule.FollowUpDecision;
+import com.zsj.meetingagent.interview.rule.FollowUpDecisionService;
+import com.zsj.meetingagent.interview.rule.FollowUpRuleTrace;
 import com.zsj.meetingagent.interview.service.impl.DefaultInterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
@@ -73,6 +76,9 @@ class DefaultInterviewServiceTest {
     @Mock
     private InterviewOrchestrator interviewOrchestrator;
 
+    @Mock
+    private FollowUpDecisionService followUpDecisionService;
+
     @Test
     void createGenerateAnswerAndReport() {
         AtomicReference<InterviewSessionDocument> sessionRef = new AtomicReference<>();
@@ -127,6 +133,12 @@ class DefaultInterviewServiceTest {
         ));
         when(interviewOrchestrator.reviewAnswer(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString()))
                 .thenReturn(new InterviewAgentOutput("回答评估 Agent", "回答质量较好，得分：90", "命中项目和技术细节"));
+        when(followUpDecisionService.decide(any())).thenReturn(new FollowUpDecision(
+                true,
+                "请补充一个具体量化结果。",
+                "缺少量化结果",
+                List.of(new FollowUpRuleTrace("缺失考点判断节点", true, "回答缺少量化结果"))
+        ));
         DefaultInterviewService service = new DefaultInterviewService(
                 resumeService,
                 aiChatService,
@@ -138,7 +150,8 @@ class DefaultInterviewServiceTest {
                 runtimeRepository,
                 knowledgeIngestionService,
                 retrievalService,
-                interviewOrchestrator
+                interviewOrchestrator,
+                followUpDecisionService
         );
 
         InterviewSessionResponse created = service.createSession("alice", new CreateInterviewSessionRequest(
@@ -159,6 +172,7 @@ class DefaultInterviewServiceTest {
         assertThat(generated.questions().getFirst().agentRunId()).isEqualTo("agent-run-1");
         assertThat(answer.status()).isEqualTo(InterviewSessionStatus.COMPLETED);
         assertThat(answer.score()).isGreaterThanOrEqualTo(90);
+        assertThat(answer.followUpRuleTrace()).contains("缺失考点判断节点");
         assertThat(service.getReport("alice", created.sessionId()).totalScore()).isGreaterThanOrEqualTo(90);
         assertThat(questionCaptor.getValue().getUserAnswer()).contains("Spring Boot");
     }

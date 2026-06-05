@@ -12,6 +12,7 @@ public record InterviewAnswerResponse(
         int score,
         String feedback,
         String followUpQuestion,
+        String followUpRuleTrace,
         InterviewSessionStatus status,
         int answeredCount,
         int questionCount
