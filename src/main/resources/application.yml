@@ -14,6 +14,14 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/my_ai_meeting}
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: ${REDIS_TIMEOUT:2s}
+      repositories:
+        enabled: false
   sql:
     init:
       mode: ${SQL_INIT_MODE:never}
@@ -62,6 +70,17 @@ app:
     default-temperature: ${OPENAI_TEMPERATURE:${SPRING_AI_OPENAI_TEMPERATURE:0.7}}
     mock-enabled: ${AI_MOCK_ENABLED:false}
     default-system-prompt: ${AI_DEFAULT_SYSTEM_PROMPT:你是一个中文友好的 Java 后端学习助手，回答要清晰、准确，并优先解释设计原因。}
+  ai-guard:
+    enabled: ${AI_GUARD_ENABLED:true}
+    redis-required: ${AI_GUARD_REDIS_REQUIRED:false}
+    namespace: ${AI_GUARD_NAMESPACE:meetingagent:ai}
+    lock-ttl: ${AI_GUARD_LOCK_TTL:30s}
+    result-ttl: ${AI_GUARD_RESULT_TTL:10m}
+    wait-timeout: ${AI_GUARD_WAIT_TIMEOUT:6s}
+    poll-interval: ${AI_GUARD_POLL_INTERVAL:100ms}
+    call-timeout: ${AI_GUARD_CALL_TIMEOUT:25s}
+    user-limit-per-minute: ${AI_GUARD_USER_LIMIT_PER_MINUTE:20}
+    fallback-answer: ${AI_GUARD_FALLBACK_ANSWER:AI 服务暂时不稳定，本次先给出降级回复：请稍后重试，或把问题拆得更具体后再次提交。}
   rag:
     default-top-k: ${RAG_DEFAULT_TOP_K:20}
     default-final-k: ${RAG_DEFAULT_FINAL_K:5}

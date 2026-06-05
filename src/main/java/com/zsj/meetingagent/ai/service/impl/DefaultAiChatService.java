@@ -4,7 +4,12 @@ import com.zsj.meetingagent.ai.config.AiModelProperties;
 import com.zsj.meetingagent.ai.dto.AiChatRequest;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.ai.vo.AiChatResponse;
+import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.common.exception.BusinessException;
+import com.zsj.meetingagent.limit.enums.AiCallOperation;
+import com.zsj.meetingagent.limit.model.AiGuardRequest;
+import com.zsj.meetingagent.limit.model.AiGuardResult;
+import com.zsj.meetingagent.limit.service.AiCallGuardService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -19,7 +24,7 @@ import java.util.List;
 
 /**
  * 默认 AI 对话服务实现。
- * 负责组织 Prompt、选择模型，并根据 mock 开关决定走本地模拟回答还是真实 Spring AI 调用。
+ * 负责组织 Prompt、选择模型，并在真实同步调用前接入 AI Guard，降低重复提交、超时和模型异常对业务的影响。
  */
 @Service
 @EnableConfigurationProperties(AiModelProperties.class)
@@ -31,9 +36,16 @@ public class DefaultAiChatService implements AiChatService {
 
     private final ChatClient.Builder chatClientBuilder;
 
-    public DefaultAiChatService(AiModelProperties aiModelProperties, ChatClient.Builder chatClientBuilder) {
+    private final AiCallGuardService aiCallGuardService;
+
+    public DefaultAiChatService(
+            AiModelProperties aiModelProperties,
+            ChatClient.Builder chatClientBuilder,
+            AiCallGuardService aiCallGuardService
+    ) {
         this.aiModelProperties = aiModelProperties;
         this.chatClientBuilder = chatClientBuilder;
+        this.aiCallGuardService = aiCallGuardService;
     }
 
     @Override
@@ -43,12 +55,24 @@ public class DefaultAiChatService implements AiChatService {
         String systemPrompt = chooseSystemPrompt(request.systemPrompt());
         Instant startedAt = Instant.now();
 
-        // mock 模式用于本地开发和自动化测试，避免每次测试都依赖真实 API Key、网络和账户余额。
-        String answer = aiModelProperties.isMockEnabled()
-                ? mockAnswer(request.message())
-                : callLargeModel(request.message(), systemPrompt, model, temperature);
-
-        long latencyMs = Duration.between(startedAt, Instant.now()).toMillis();
+        String answer;
+        long latencyMs;
+        if (aiModelProperties.isMockEnabled()) {
+            // mock 模式用于本地开发和自动化测试，避免每次测试都依赖真实 API Key、网络和账户余额。
+            answer = mockAnswer(request.message());
+            latencyMs = Duration.between(startedAt, Instant.now()).toMillis();
+        } else {
+            /*
+             * 真实模型调用统一经过 AI Guard。
+             * 这样普通聊天、模拟面试出题和 Agent 复用 AiChatService 时，都能获得限流、Single-flight 和降级能力。
+             */
+            AiGuardResult guardResult = aiCallGuardService.executeText(
+                    buildGuardRequest(request, systemPrompt, model, temperature),
+                    () -> callLargeModel(request.message(), systemPrompt, model, temperature)
+            );
+            answer = guardResult.answer();
+            latencyMs = guardResult.latencyMs();
+        }
         return new AiChatResponse(answer, model, aiModelProperties.getProvider(), latencyMs, aiModelProperties.isMockEnabled());
     }
 
@@ -105,6 +129,34 @@ public class DefaultAiChatService implements AiChatService {
         } catch (Exception ex) {
             throw new BusinessException(AI_CALL_ERROR_CODE, "AI 模型调用失败，请检查 API Key、模型名称或网络配置");
         }
+    }
+
+    private AiGuardRequest buildGuardRequest(AiChatRequest request, String systemPrompt, String model, double temperature) {
+        String username = LoginUserContext.tryCurrentUsername().orElse("system");
+        String rawKey = "%s|%s|%s|%s".formatted(
+                request.message(),
+                systemPrompt,
+                model,
+                temperature
+        );
+        return AiGuardRequest.of(username, resolveOperation(request.message(), systemPrompt), model, rawKey);
+    }
+
+    private AiCallOperation resolveOperation(String message, String systemPrompt) {
+        String text = (message == null ? "" : message) + "\n" + (systemPrompt == null ? "" : systemPrompt);
+        if (containsAny(text, "模拟面试", "面试题", "出题", "候选人", "简历")) {
+            return AiCallOperation.INTERVIEW_QUESTION_GENERATION;
+        }
+        return AiCallOperation.CHAT_SYNC;
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String chooseModel(String requestedModel) {

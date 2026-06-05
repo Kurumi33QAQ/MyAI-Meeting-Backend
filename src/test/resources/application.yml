@@ -17,6 +17,11 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27017/meeting_agent_test
+    redis:
+      host: localhost
+      port: 6379
+      repositories:
+        enabled: false
 
 mybatis:
   configuration:
@@ -43,6 +48,17 @@ app:
     default-temperature: 0.7
     mock-enabled: true
     default-system-prompt: 你是一个中文友好的 Java 后端学习助手，回答要清晰、准确，并优先解释设计原因。
+  ai-guard:
+    enabled: false
+    redis-required: false
+    namespace: meetingagent:test:ai
+    lock-ttl: 30s
+    result-ttl: 10m
+    wait-timeout: 1s
+    poll-interval: 20ms
+    call-timeout: 2s
+    user-limit-per-minute: 20
+    fallback-answer: AI 服务暂时不可用，请稍后再试。
   evaluation:
     default-dataset-path: classpath:evaluation/eval_cases.json
     report-dir: target/test-reports/evaluation
