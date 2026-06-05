@@ -91,3 +91,42 @@ CREATE TABLE IF NOT EXISTS knowledge_chunk (
     KEY idx_knowledge_chunk_source (username, source_id, document_type),
     KEY idx_knowledge_chunk_document (document_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识片段表，保存结构化chunk和RAG证据引用内容';
+
+CREATE TABLE IF NOT EXISTS evaluation_run (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '评测任务主键ID',
+    run_id VARCHAR(80) NOT NULL COMMENT '评测任务业务ID',
+    username VARCHAR(64) NOT NULL COMMENT '评测任务创建用户',
+    dataset_name VARCHAR(200) NOT NULL COMMENT '测试集名称或路径',
+    total_cases INT NOT NULL DEFAULT 0 COMMENT '本次评测样本总数',
+    baseline_summary_json JSON COMMENT 'baseline方案指标汇总JSON',
+    rag_without_rerank_summary_json JSON COMMENT '基础RAG不带rerank方案指标汇总JSON',
+    rag_with_rerank_summary_json JSON COMMENT '结构化chunk加rerank方案指标汇总JSON',
+    self_check_rag_summary_json JSON COMMENT 'RAG加自检拒答方案指标汇总JSON',
+    report_json_path VARCHAR(500) COMMENT '评测JSON报告输出路径',
+    report_markdown_path VARCHAR(500) COMMENT '评测Markdown报告输出路径',
+    created_at DATETIME(6) NOT NULL COMMENT '创建时间',
+    completed_at DATETIME(6) NOT NULL COMMENT '完成时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标记，0表示正常，1表示删除',
+    UNIQUE KEY uk_evaluation_run_run_id (run_id),
+    KEY idx_evaluation_run_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='评测任务表，保存RAG和Agent效果评测的汇总指标';
+
+CREATE TABLE IF NOT EXISTS evaluation_case_result (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '评测明细主键ID',
+    run_id VARCHAR(80) NOT NULL COMMENT '所属评测任务业务ID',
+    case_id VARCHAR(80) NOT NULL COMMENT '测试样本ID',
+    strategy VARCHAR(60) NOT NULL COMMENT '评测方案：baseline、rag_without_rerank、rag_with_rerank、self_check_rag',
+    category VARCHAR(80) COMMENT '测试样本分类，例如java_backend、interview、rag',
+    question VARCHAR(1000) NOT NULL COMMENT '测试问题',
+    answer MEDIUMTEXT COMMENT '方案生成的回答',
+    ground_truth MEDIUMTEXT NOT NULL COMMENT '标准答案',
+    cited_evidence_ids VARCHAR(1000) COMMENT '回答引用的证据ID，逗号分隔',
+    answer_correct TINYINT NOT NULL DEFAULT 0 COMMENT '回答是否命中标准答案，1表示命中',
+    hallucinated TINYINT NOT NULL DEFAULT 0 COMMENT '回答是否判定为幻觉，1表示存在幻觉',
+    citation_correct TINYINT NOT NULL DEFAULT 0 COMMENT '引用证据是否正确，1表示正确',
+    latency_ms BIGINT NOT NULL DEFAULT 0 COMMENT '单条样本响应耗时，单位毫秒',
+    created_at DATETIME(6) NOT NULL COMMENT '创建时间',
+    KEY idx_evaluation_case_run (run_id),
+    KEY idx_evaluation_case_strategy (run_id, strategy),
+    KEY idx_evaluation_case_category (category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='评测样本结果表，保存每条case在不同方案下的明细指标';

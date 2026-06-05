@@ -1,0 +1,90 @@
+[
+  {
+    "id": "java-backend-001",
+    "question": "Spring Boot 自动配置的核心机制是什么？",
+    "groundTruth": "Spring Boot 自动配置主要基于自动配置类、条件注解和配置属性，在满足条件时自动装配 Bean。",
+    "evidence": [
+      {
+        "id": "ev-java-001",
+        "text": "Spring Boot 自动配置主要依赖 AutoConfiguration 自动配置类、Conditional 条件注解和配置属性，在类路径与配置条件满足时自动注册 Bean。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "参考答案",
+        "tags": "java_backend,core,interview"
+      },
+      {
+        "id": "ev-java-002",
+        "text": "面试回答应说明自动配置不是魔法，而是 Spring 根据条件注解判断是否创建对应 Bean。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "考察点",
+        "tags": "java_backend,interview"
+      }
+    ],
+    "category": "java_backend"
+  },
+  {
+    "id": "rag-001",
+    "question": "为什么简历 RAG 的 chunk 不应该只按固定字数切分？",
+    "groundTruth": "简历 RAG 应按基本信息、技能栈、项目经历、实习经历等业务结构切分，避免项目背景、职责、技术方案和结果被切散。",
+    "evidence": [
+      {
+        "id": "ev-rag-001",
+        "text": "简历 chunk 应按基本信息、教育经历、技能栈、项目经历、实习经历、竞赛经历、自我评价等结构切分，而不是只按固定字数切分。",
+        "documentType": "RESUME",
+        "sectionName": "chunk策略",
+        "tags": "rag,core,resume"
+      },
+      {
+        "id": "ev-rag-002",
+        "text": "按结构切分可以保持项目背景、个人职责、技术方案、难点和结果在同一上下文中，提高检索上下文完整性。",
+        "documentType": "RESUME",
+        "sectionName": "项目经历",
+        "tags": "rag,interview"
+      }
+    ],
+    "category": "rag"
+  },
+  {
+    "id": "interview-001",
+    "question": "模拟面试中多 Agent 协同出题相比单次 LLM 出题有什么价值？",
+    "groundTruth": "多 Agent 可以把简历分析、岗位上下文分析、出题设计和回答评估拆开，并保存每个 Agent 的轨迹，提升可解释性和后续评测能力。",
+    "evidence": [
+      {
+        "id": "ev-agent-001",
+        "text": "多 Agent 协同面试把简历分析 Agent、岗位上下文 Agent、出题设计 Agent、回答评估 Agent 拆开执行，并将 agent_run 和 agent_step_trace 存入 MongoDB。",
+        "documentType": "INTERVIEW_TRACE",
+        "sectionName": "多Agent编排",
+        "tags": "agent,interview,core"
+      },
+      {
+        "id": "ev-agent-002",
+        "text": "相比单次 LLM 出题，多 Agent 轨迹能解释题目为什么生成、参考了哪些证据、哪个角色做了什么观察。",
+        "documentType": "INTERVIEW_TRACE",
+        "sectionName": "可解释性",
+        "tags": "agent,interview"
+      }
+    ],
+    "category": "interview_agent"
+  },
+  {
+    "id": "liteflow-001",
+    "question": "LiteFlow 追问规则链在模拟面试里解决什么问题？",
+    "groundTruth": "LiteFlow 追问规则链把面试状态保护、追问次数限制、低分判断、缺失考点判断、AI 建议判断和最终裁决拆成节点，避免追问逻辑堆在 Service 的 if else 中。",
+    "evidence": [
+      {
+        "id": "ev-liteflow-001",
+        "text": "LiteFlow 追问规则链包含面试状态保护、追问次数限制、低分判断、缺失考点判断、AI 建议判断和最终裁决节点。",
+        "documentType": "INTERVIEW_RULE",
+        "sectionName": "规则链",
+        "tags": "liteflow,interview,core"
+      },
+      {
+        "id": "ev-liteflow-002",
+        "text": "追问规则链可以让 Service 只负责收集上下文和保存结果，具体追问裁决交给独立规则节点，避免 if else 越堆越长。",
+        "documentType": "INTERVIEW_RULE",
+        "sectionName": "设计原因",
+        "tags": "liteflow,backend"
+      }
+    ],
+    "category": "interview_rule"
+  }
+]

@@ -43,3 +43,9 @@ app:
     default-temperature: 0.7
     mock-enabled: true
     default-system-prompt: 你是一个中文友好的 Java 后端学习助手，回答要清晰、准确，并优先解释设计原因。
+  evaluation:
+    default-dataset-path: classpath:evaluation/eval_cases.json
+    report-dir: target/test-reports/evaluation
+    answer-hit-threshold: 0.35
+    citation-hit-threshold: 0.25
+    self-check-min-confidence: 0.2

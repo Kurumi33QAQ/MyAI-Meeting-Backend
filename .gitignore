@@ -3,6 +3,8 @@
 *.err
 .env
 !.env.example
+reports/
+stage*-response.txt
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
