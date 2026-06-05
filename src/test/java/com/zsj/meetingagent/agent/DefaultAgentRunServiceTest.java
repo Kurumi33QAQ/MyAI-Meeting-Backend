@@ -11,6 +11,7 @@ import com.zsj.meetingagent.agent.service.impl.DefaultAgentRunService;
 import com.zsj.meetingagent.agent.tool.AgentTool;
 import com.zsj.meetingagent.agent.tool.AgentToolContext;
 import com.zsj.meetingagent.agent.tool.AgentToolResult;
+import com.zsj.meetingagent.ai.config.AiModelProperties;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.ai.vo.AiChatResponse;
 import org.junit.jupiter.api.Test;
@@ -82,7 +83,8 @@ class DefaultAgentRunServiceTest {
                 agentRunRepository,
                 stepTraceRepository,
                 List.of(fakeTool),
-                aiChatService
+                aiChatService,
+                testAiModelProperties()
         );
 
         var response = service.run("alice", new AgentRunRequest("现在几点", null, "gpt-4o-mini", 4));
@@ -96,5 +98,11 @@ class DefaultAgentRunServiceTest {
         assertThat(response.steps().get(3).stepType()).isEqualTo(AgentStepType.FINAL_ANSWER);
         assertThat(runCaptor.getAllValues().getLast().getStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(runCaptor.getAllValues().getLast().getUpdatedAt()).isAfterOrEqualTo(Instant.EPOCH);
+    }
+
+    private AiModelProperties testAiModelProperties() {
+        AiModelProperties properties = new AiModelProperties();
+        properties.setDefaultModel("gpt-4o-mini");
+        return properties;
     }
 }

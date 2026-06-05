@@ -13,6 +13,7 @@ public record InterviewSessionResponse(
         String sessionId,
         String resumeId,
         String jobTitle,
+        String companyName,
         String jobDescription,
         InterviewSessionStatus status,
         int questionCount,

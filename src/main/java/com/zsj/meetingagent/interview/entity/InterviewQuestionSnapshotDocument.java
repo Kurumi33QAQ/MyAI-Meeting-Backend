@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 面试题目快照 MongoDB 文档。
@@ -33,6 +34,10 @@ public class InterviewQuestionSnapshotDocument {
     private String evaluationPoints;
 
     private String followUpDirection;
+
+    private List<String> evidenceIds;
+
+    private String evidenceSummary;
 
     private String userAnswer;
 
@@ -108,6 +113,22 @@ public class InterviewQuestionSnapshotDocument {
 
     public void setFollowUpDirection(String followUpDirection) {
         this.followUpDirection = followUpDirection;
+    }
+
+    public List<String> getEvidenceIds() {
+        return evidenceIds;
+    }
+
+    public void setEvidenceIds(List<String> evidenceIds) {
+        this.evidenceIds = evidenceIds;
+    }
+
+    public String getEvidenceSummary() {
+        return evidenceSummary;
+    }
+
+    public void setEvidenceSummary(String evidenceSummary) {
+        this.evidenceSummary = evidenceSummary;
     }
 
     public String getUserAnswer() {

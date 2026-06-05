@@ -1,7 +1,10 @@
 package com.zsj.meetingagent.interview.prompt;
 
+import com.zsj.meetingagent.rag.vo.EvidenceResponse;
 import com.zsj.meetingagent.resume.vo.ResumeResponse;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /**
  * 模拟面试 Prompt 构造器。
@@ -10,7 +13,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class InterviewPromptBuilder {
 
-    public String buildQuestionPrompt(ResumeResponse resume, String jobTitle, String jobDescription, int questionCount) {
+    public String buildQuestionPrompt(
+            ResumeResponse resume,
+            String jobTitle,
+            String companyName,
+            String jobDescription,
+            int questionCount,
+            List<EvidenceResponse> evidenceList
+    ) {
         return """
                 请作为 Java 后端模拟面试官，根据候选人简历摘要和目标岗位生成面试题建议。
 
@@ -20,14 +30,30 @@ public class InterviewPromptBuilder {
                 目标岗位：
                 %s
 
+                目标公司：
+                %s
+
                 岗位 JD：
+                %s
+
+                可引用证据：
                 %s
 
                 需要题目数量：
                 %d
 
-                要求：题目要围绕 Java 后端、项目经历、数据库、系统设计和问题排查能力。
-                """.formatted(resume.summary(), jobTitle, blankToDefault(jobDescription, "未提供"), questionCount);
+                要求：
+                1. 题目要围绕 Java 后端、项目经历、数据库、系统设计和问题排查能力。
+                2. 优先结合可引用证据出题，不要编造简历或 JD 中没有的信息。
+                3. 如果证据不足，请明确提醒后端走低置信度处理，而不是硬编细节。
+                """.formatted(
+                resume.summary(),
+                jobTitle,
+                blankToDefault(companyName, "未填写"),
+                blankToDefault(jobDescription, "未提供"),
+                buildEvidenceText(evidenceList),
+                questionCount
+        );
     }
 
     public String buildAnswerReviewPrompt(String question, String answer, String evaluationPoints) {
@@ -49,5 +75,24 @@ public class InterviewPromptBuilder {
 
     private String blankToDefault(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private String buildEvidenceText(List<EvidenceResponse> evidenceList) {
+        if (evidenceList == null || evidenceList.isEmpty()) {
+            return "未召回到证据。";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (EvidenceResponse evidence : evidenceList) {
+            builder.append("- evidenceId=")
+                    .append(evidence.evidenceId())
+                    .append("，类型=")
+                    .append(evidence.documentType())
+                    .append("，章节=")
+                    .append(evidence.sectionName())
+                    .append("，内容=")
+                    .append(evidence.content())
+                    .append('\n');
+        }
+        return builder.toString();
     }
 }

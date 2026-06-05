@@ -13,6 +13,7 @@ import com.zsj.meetingagent.agent.tool.AgentToolContext;
 import com.zsj.meetingagent.agent.tool.AgentToolResult;
 import com.zsj.meetingagent.agent.vo.AgentRunResponse;
 import com.zsj.meetingagent.agent.vo.AgentStepResponse;
+import com.zsj.meetingagent.ai.config.AiModelProperties;
 import com.zsj.meetingagent.ai.dto.AiChatRequest;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.ai.vo.AiChatResponse;
@@ -32,7 +33,6 @@ import java.util.UUID;
 @Service
 public class DefaultAgentRunService implements AgentRunService {
 
-    private static final String DEFAULT_MODEL = "gpt-4o-mini";
     private static final String AGENT_SYSTEM_PROMPT = """
             你是一个中文友好的 Java 后端 Agent。
             你必须基于用户问题和工具观察结果回答，不要编造工具没有返回的信息。
@@ -43,23 +43,26 @@ public class DefaultAgentRunService implements AgentRunService {
     private final AgentStepTraceRepository stepTraceRepository;
     private final List<AgentTool> tools;
     private final AiChatService aiChatService;
+    private final AiModelProperties aiModelProperties;
 
     public DefaultAgentRunService(
             AgentRunRepository agentRunRepository,
             AgentStepTraceRepository stepTraceRepository,
             List<AgentTool> tools,
-            AiChatService aiChatService
+            AiChatService aiChatService,
+            AiModelProperties aiModelProperties
     ) {
         this.agentRunRepository = agentRunRepository;
         this.stepTraceRepository = stepTraceRepository;
         this.tools = tools;
         this.aiChatService = aiChatService;
+        this.aiModelProperties = aiModelProperties;
     }
 
     @Override
     public AgentRunResponse run(String username, AgentRunRequest request) {
         String runId = UUID.randomUUID().toString();
-        String model = hasText(request.model()) ? request.model() : DEFAULT_MODEL;
+        String model = hasText(request.model()) ? request.model() : aiModelProperties.getDefaultModel();
         Instant now = Instant.now();
 
         AgentRunDocument run = new AgentRunDocument();

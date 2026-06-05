@@ -66,6 +66,8 @@ class InterviewControllerTest {
                 "应包含背景、职责、方案和结果。",
                 "项目理解、技术细节、表达结构",
                 "追问技术细节",
+                List.of("evidence-1"),
+                "项目经历：Spring Boot 接口开发",
                 null,
                 null,
                 null,
@@ -77,6 +79,7 @@ class InterviewControllerTest {
                 "session-1",
                 "resume-1",
                 "Java 后端开发",
+                "示例公司",
                 "熟悉 Spring Boot",
                 InterviewSessionStatus.QUESTION_GENERATED,
                 1,
@@ -101,6 +104,7 @@ class InterviewControllerTest {
                                 {
                                   "resumeId": "resume-1",
                                   "jobTitle": "Java 后端开发",
+                                  "companyName": "示例公司",
                                   "jobDescription": "熟悉 Spring Boot",
                                   "questionCount": 1
                                 }

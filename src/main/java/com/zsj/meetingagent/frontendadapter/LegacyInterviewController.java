@@ -77,6 +77,7 @@ public class LegacyInterviewController {
         InterviewSessionResponse response = interviewService.createSession(LoginUserContext.currentUsername(), new CreateInterviewSessionRequest(
                 stringValue(request, "resumeId"),
                 stringValue(request, "jobTitle"),
+                firstStringValue(request, "companyName", "company"),
                 stringValue(request, "jobDescription"),
                 intValue(request, "questionCount")
         ));
@@ -99,6 +100,7 @@ public class LegacyInterviewController {
             interviewService.createSession(LoginUserContext.currentUsername(), sessionId, new CreateInterviewSessionRequest(
                     resume.resumeId(),
                     "Java 后端开发实习生",
+                    "",
                     "结合用户上传简历，重点考察 Java、Spring Boot、数据库、缓存、接口设计和项目表达能力。",
                     5
             ));
@@ -227,6 +229,7 @@ public class LegacyInterviewController {
         payload.put("sessionId", response.sessionId());
         payload.put("resumeId", response.resumeId());
         payload.put("jobTitle", response.jobTitle());
+        payload.put("companyName", response.companyName());
         payload.put("status", response.status());
         payload.put("questionCount", response.questionCount());
         payload.put("answeredCount", response.answeredCount());
@@ -245,6 +248,8 @@ public class LegacyInterviewController {
         payload.put("referenceAnswer", question.referenceAnswer());
         payload.put("evaluationPoints", question.evaluationPoints());
         payload.put("followUpDirection", question.followUpDirection());
+        payload.put("evidenceIds", question.evidenceIds());
+        payload.put("evidenceSummary", question.evidenceSummary());
         payload.put("userAnswer", question.userAnswer());
         payload.put("score", question.score());
         payload.put("feedback", question.feedback());

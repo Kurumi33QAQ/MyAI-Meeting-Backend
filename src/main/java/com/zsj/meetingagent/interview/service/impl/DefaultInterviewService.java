@@ -1,6 +1,7 @@
 package com.zsj.meetingagent.interview.service.impl;
 
 import com.zsj.meetingagent.ai.dto.AiChatRequest;
+import com.zsj.meetingagent.ai.config.AiModelProperties;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.common.exception.BusinessException;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
@@ -20,6 +21,9 @@ import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
+import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
+import com.zsj.meetingagent.rag.service.RetrievalService;
+import com.zsj.meetingagent.rag.vo.EvidenceResponse;
 import com.zsj.meetingagent.resume.service.ResumeService;
 import com.zsj.meetingagent.resume.vo.ResumeResponse;
 import org.springframework.stereotype.Service;
@@ -40,7 +44,6 @@ public class DefaultInterviewService implements InterviewService {
     private static final int DEFAULT_QUESTION_COUNT = 5;
     private static final int MAX_QUESTION_COUNT = 10;
     private static final int NOT_DELETED = 0;
-    private static final String DEFAULT_MODEL = "gpt-4o-mini";
     private static final String INTERVIEW_SYSTEM_PROMPT = """
             你是一个中文友好的 Java 后端模拟面试官。
             你的反馈要具体、可执行，并优先围绕候选人的项目经历和 Java 后端基础能力。
@@ -53,23 +56,32 @@ public class DefaultInterviewService implements InterviewService {
     private final InterviewSessionRepository sessionRepository;
     private final InterviewQuestionSnapshotRepository questionRepository;
     private final InterviewRuntimeSnapshotRepository runtimeRepository;
+    private final KnowledgeIngestionService knowledgeIngestionService;
+    private final RetrievalService retrievalService;
+    private final AiModelProperties aiModelProperties;
 
     public DefaultInterviewService(
             ResumeService resumeService,
             AiChatService aiChatService,
+            AiModelProperties aiModelProperties,
             InterviewPromptBuilder promptBuilder,
             InterviewRecordMapper interviewRecordMapper,
             InterviewSessionRepository sessionRepository,
             InterviewQuestionSnapshotRepository questionRepository,
-            InterviewRuntimeSnapshotRepository runtimeRepository
+            InterviewRuntimeSnapshotRepository runtimeRepository,
+            KnowledgeIngestionService knowledgeIngestionService,
+            RetrievalService retrievalService
     ) {
         this.resumeService = resumeService;
         this.aiChatService = aiChatService;
+        this.aiModelProperties = aiModelProperties;
         this.promptBuilder = promptBuilder;
         this.interviewRecordMapper = interviewRecordMapper;
         this.sessionRepository = sessionRepository;
         this.questionRepository = questionRepository;
         this.runtimeRepository = runtimeRepository;
+        this.knowledgeIngestionService = knowledgeIngestionService;
+        this.retrievalService = retrievalService;
     }
 
     @Override
@@ -92,6 +104,7 @@ public class DefaultInterviewService implements InterviewService {
         session.setUsername(username);
         session.setResumeId(resume.resumeId());
         session.setJobTitle(request.jobTitle().trim());
+        session.setCompanyName(blankToDefault(request.companyName(), ""));
         session.setJobDescription(blankToDefault(request.jobDescription(), ""));
         session.setStatus(InterviewSessionStatus.CREATED);
         session.setQuestionCount(questionCount);
@@ -115,6 +128,18 @@ public class DefaultInterviewService implements InterviewService {
                 now,
                 NOT_DELETED
         ));
+        /*
+         * 阶段 7 开始，创建面试会话时顺手把简历和 JD 入知识库。
+         * 后续生成题目、回答自检和 evaluation 都可以复用同一批 chunk。
+         */
+        knowledgeIngestionService.ingestResume(username, resume.resumeId());
+        knowledgeIngestionService.ingestJobDescription(
+                username,
+                sessionId.trim(),
+                request.jobTitle(),
+                request.companyName(),
+                request.jobDescription()
+        );
         saveRuntime(sessionId, username, "CREATE_SESSION", "创建模拟面试会话，目标岗位：" + request.jobTitle().trim());
         return toSessionResponse(session, List.of());
     }
@@ -131,20 +156,38 @@ public class DefaultInterviewService implements InterviewService {
         }
 
         ResumeResponse resume = resumeService.getResume(username, session.getResumeId());
+        List<EvidenceResponse> evidenceList = retrievalService.retrieveForInterview(
+                username,
+                session.getResumeId(),
+                session.getSessionId(),
+                session.getJobTitle(),
+                session.getCompanyName(),
+                session.getJobDescription()
+        );
         /*
+         * AI 调用前先做 RAG 检索，把简历/JD 证据塞进 Prompt。
+         * 当前题目结构仍由后端规则生成，保证自动化测试和前端联调稳定。
          * AI 调用的结果先作为生成题目的参考说明保存到运行快照。
          * 当前题目结构仍由后端规则生成，保证自动化测试和前端联调稳定。
          */
         String aiSuggestion = aiChatService.chat(new AiChatRequest(
-                promptBuilder.buildQuestionPrompt(resume, session.getJobTitle(), session.getJobDescription(), session.getQuestionCount()),
+                promptBuilder.buildQuestionPrompt(
+                        resume,
+                        session.getJobTitle(),
+                        session.getCompanyName(),
+                        session.getJobDescription(),
+                        session.getQuestionCount(),
+                        evidenceList
+                ),
                 null,
-                DEFAULT_MODEL,
+                defaultModel(),
                 INTERVIEW_SYSTEM_PROMPT,
                 null
         )).answer();
         saveRuntime(sessionId, username, "GENERATE_QUESTIONS_AI_CONTEXT", shorten(aiSuggestion, 500));
+        saveRuntime(sessionId, username, "RAG_EVIDENCE", buildEvidenceRuntimeSummary(evidenceList));
 
-        List<InterviewQuestionSnapshotDocument> questions = buildQuestions(session);
+        List<InterviewQuestionSnapshotDocument> questions = buildQuestions(session, evidenceList);
         questionRepository.saveAll(questions);
 
         session.setStatus(InterviewSessionStatus.QUESTION_GENERATED);
@@ -177,7 +220,7 @@ public class DefaultInterviewService implements InterviewService {
         String aiFeedback = aiChatService.chat(new AiChatRequest(
                 promptBuilder.buildAnswerReviewPrompt(question.getQuestion(), request.answer(), question.getEvaluationPoints()),
                 null,
-                DEFAULT_MODEL,
+                defaultModel(),
                 INTERVIEW_SYSTEM_PROMPT,
                 null
         )).answer();
@@ -270,7 +313,7 @@ public class DefaultInterviewService implements InterviewService {
         }
     }
 
-    private List<InterviewQuestionSnapshotDocument> buildQuestions(InterviewSessionDocument session) {
+    private List<InterviewQuestionSnapshotDocument> buildQuestions(InterviewSessionDocument session, List<EvidenceResponse> evidenceList) {
         List<String> templates = List.of(
                 "请结合你的简历，介绍一个最能体现 %s 能力的项目。",
                 "你在项目中如何使用 Spring Boot、MySQL 或 Redis 解决实际问题？",
@@ -295,6 +338,8 @@ public class DefaultInterviewService implements InterviewService {
             question.setReferenceAnswer("回答应包含背景、职责、技术方案、遇到的问题、解决过程和量化结果。");
             question.setEvaluationPoints("考察 Java 后端基础、项目理解、问题排查、表达结构和结果意识。");
             question.setFollowUpDirection("根据候选人回答继续追问技术细节、权衡理由和真实贡献。");
+            question.setEvidenceIds(evidenceList.stream().map(EvidenceResponse::evidenceId).toList());
+            question.setEvidenceSummary(buildQuestionEvidenceSummary(evidenceList));
             question.setCreatedAt(now);
             questions.add(question);
         }
@@ -407,6 +452,7 @@ public class DefaultInterviewService implements InterviewService {
                 session.getSessionId(),
                 session.getResumeId(),
                 session.getJobTitle(),
+                session.getCompanyName(),
                 session.getJobDescription(),
                 session.getStatus(),
                 session.getQuestionCount(),
@@ -427,6 +473,8 @@ public class DefaultInterviewService implements InterviewService {
                 question.getReferenceAnswer(),
                 question.getEvaluationPoints(),
                 question.getFollowUpDirection(),
+                question.getEvidenceIds() == null ? List.of() : question.getEvidenceIds(),
+                question.getEvidenceSummary(),
                 question.getUserAnswer(),
                 question.getScore(),
                 question.getFeedback(),
@@ -438,6 +486,41 @@ public class DefaultInterviewService implements InterviewService {
 
     private String blankToDefault(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
+    }
+
+    private String defaultModel() {
+        /*
+         * 面试模块不能硬编码某个供应商模型名。
+         * 真实调用时统一读取 MODEL_ID/app.ai.default-model，避免 DeepSeek 环境仍请求 gpt-4o-mini。
+         */
+        return aiModelProperties.getDefaultModel();
+    }
+
+    private String buildEvidenceRuntimeSummary(List<EvidenceResponse> evidenceList) {
+        if (evidenceList.isEmpty()) {
+            return "未召回到可用证据，后续阶段将接入低置信度拒答。";
+        }
+        return evidenceList.stream()
+                .map(evidence -> "[%s] %s/%s score=%s：%s".formatted(
+                        evidence.evidenceId(),
+                        evidence.documentType(),
+                        evidence.sectionName(),
+                        evidence.rerankScore(),
+                        shorten(evidence.content(), 120)
+                ))
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
+    }
+
+    private String buildQuestionEvidenceSummary(List<EvidenceResponse> evidenceList) {
+        if (evidenceList.isEmpty()) {
+            return "本题暂未绑定证据，后续会通过低置信度拒答避免无依据出题。";
+        }
+        return evidenceList.stream()
+                .limit(3)
+                .map(evidence -> "%s：%s".formatted(evidence.sectionName(), shorten(evidence.summary(), 80)))
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("");
     }
 
     private String shorten(String value, int maxLength) {

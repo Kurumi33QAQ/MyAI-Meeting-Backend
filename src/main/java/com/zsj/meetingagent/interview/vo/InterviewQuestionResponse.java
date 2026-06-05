@@ -1,6 +1,7 @@
 package com.zsj.meetingagent.interview.vo;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 面试题目响应。
@@ -13,6 +14,8 @@ public record InterviewQuestionResponse(
         String referenceAnswer,
         String evaluationPoints,
         String followUpDirection,
+        List<String> evidenceIds,
+        String evidenceSummary,
         String userAnswer,
         Integer score,
         String feedback,

@@ -18,6 +18,9 @@ public record CreateInterviewSessionRequest(
         @Size(max = 120, message = "长度不能超过 120 个字符")
         String jobTitle,
 
+        @Size(max = 120, message = "长度不能超过 120 个字符")
+        String companyName,
+
         @Size(max = 5000, message = "长度不能超过 5000 个字符")
         String jobDescription,
 

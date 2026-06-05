@@ -1,6 +1,7 @@
 package com.zsj.meetingagent.interview;
 
 import com.zsj.meetingagent.ai.dto.AiChatRequest;
+import com.zsj.meetingagent.ai.config.AiModelProperties;
 import com.zsj.meetingagent.ai.service.AiChatService;
 import com.zsj.meetingagent.ai.vo.AiChatResponse;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
@@ -16,6 +17,8 @@ import com.zsj.meetingagent.interview.repository.InterviewSessionRepository;
 import com.zsj.meetingagent.interview.service.impl.DefaultInterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
+import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
+import com.zsj.meetingagent.rag.service.RetrievalService;
 import com.zsj.meetingagent.resume.service.ResumeService;
 import com.zsj.meetingagent.resume.vo.ResumeResponse;
 import org.junit.jupiter.api.Test;
@@ -56,6 +59,12 @@ class DefaultInterviewServiceTest {
     @Mock
     private InterviewRuntimeSnapshotRepository runtimeRepository;
 
+    @Mock
+    private KnowledgeIngestionService knowledgeIngestionService;
+
+    @Mock
+    private RetrievalService retrievalService;
+
     @Test
     void createGenerateAnswerAndReport() {
         AtomicReference<InterviewSessionDocument> sessionRef = new AtomicReference<>();
@@ -93,20 +102,26 @@ class DefaultInterviewServiceTest {
         when(interviewRecordMapper.insert(any())).thenReturn(1);
         when(interviewRecordMapper.updateProgress(any())).thenReturn(1);
         when(runtimeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(retrievalService.retrieveForInterview(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(List.of());
 
         DefaultInterviewService service = new DefaultInterviewService(
                 resumeService,
                 aiChatService,
+                testAiModelProperties(),
                 new InterviewPromptBuilder(),
                 interviewRecordMapper,
                 sessionRepository,
                 questionRepository,
-                runtimeRepository
+                runtimeRepository,
+                knowledgeIngestionService,
+                retrievalService
         );
 
         InterviewSessionResponse created = service.createSession("alice", new CreateInterviewSessionRequest(
                 "resume-1",
                 "Java 后端开发",
+                "示例公司",
                 "熟悉 Spring Boot 和 MySQL",
                 1
         ));
@@ -122,5 +137,11 @@ class DefaultInterviewServiceTest {
         assertThat(answer.score()).isGreaterThanOrEqualTo(90);
         assertThat(service.getReport("alice", created.sessionId()).totalScore()).isGreaterThanOrEqualTo(90);
         assertThat(questionCaptor.getValue().getUserAnswer()).contains("Spring Boot");
+    }
+
+    private AiModelProperties testAiModelProperties() {
+        AiModelProperties properties = new AiModelProperties();
+        properties.setDefaultModel("gpt-4o-mini");
+        return properties;
     }
 }
