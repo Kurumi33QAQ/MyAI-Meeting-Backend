@@ -2,11 +2,14 @@ package com.zsj.meetingagent.interview.controller;
 
 import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.common.result.ApiResponse;
+import com.zsj.meetingagent.common.vo.PageResponse;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
+import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.agent.vo.AgentStepResponse;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -39,6 +43,42 @@ public class InterviewController {
             @Valid @RequestBody CreateInterviewSessionRequest request
     ) {
         return ApiResponse.success(interviewService.createSession(LoginUserContext.currentUsername(), request));
+    }
+
+    @GetMapping("/api/interview-sessions")
+    public ApiResponse<PageResponse<InterviewConversationResponse>> pageInterviewConversations(
+            @RequestParam(defaultValue = "1") int current,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String keyword
+    ) {
+        return ApiResponse.success(interviewService.pageInterviewConversations(
+                LoginUserContext.currentUsername(),
+                current,
+                size,
+                status,
+                keyword
+        ));
+    }
+
+    @GetMapping("/api/interviews")
+    public ApiResponse<PageResponse<InterviewRecordResponse>> pageInterviewRecords(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String sessionId,
+            @RequestParam(required = false) Integer minScore,
+            @RequestParam(required = false) Integer maxScore,
+            @RequestParam(required = false) String interviewDirection
+    ) {
+        return ApiResponse.success(interviewService.pageInterviewRecords(
+                LoginUserContext.currentUsername(),
+                pageNum,
+                pageSize,
+                sessionId,
+                minScore,
+                maxScore,
+                interviewDirection
+        ));
     }
 
     @PostMapping("/api/interview-sessions/{sessionId}/questions")

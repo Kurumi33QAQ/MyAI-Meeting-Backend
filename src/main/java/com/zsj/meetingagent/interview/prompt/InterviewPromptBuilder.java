@@ -43,9 +43,22 @@ public class InterviewPromptBuilder {
                 %d
 
                 要求：
-                1. 题目要围绕 Java 后端、项目经历、数据库、系统设计和问题排查能力。
+                1. 题目要围绕 Java 后端、项目经历、数据库、系统设计、问题排查、目标公司和岗位 JD。
                 2. 优先结合可引用证据出题，不要编造简历或 JD 中没有的信息。
-                3. 如果证据不足，请明确提醒后端走低置信度处理，而不是硬编细节。
+                3. 每道题必须尽量不同，不要重复“介绍一个项目”这种泛问题。
+                4. 只输出 JSON，不要输出 Markdown，不要解释。
+                5. JSON 格式必须如下：
+                {
+                  "questions": [
+                    {
+                      "question": "面试题正文",
+                      "referenceAnswer": "参考回答要点",
+                      "evaluationPoints": "考察点",
+                      "followUpDirection": "追问方向"
+                    }
+                  ]
+                }
+                6. 如果证据不足，请在题目中询问候选人澄清事实，而不是硬编细节。
                 """.formatted(
                 resume.summary(),
                 jobTitle,

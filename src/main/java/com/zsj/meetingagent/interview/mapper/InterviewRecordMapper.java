@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -50,6 +51,109 @@ public interface InterviewRecordMapper {
             LIMIT 1
             """)
     Optional<InterviewRecord> findBySessionIdAndUsername(@Param("sessionId") String sessionId, @Param("username") String username);
+
+    @Select("""
+            <script>
+            SELECT
+                id,
+                session_id AS sessionId,
+                username,
+                resume_id AS resumeId,
+                job_title AS jobTitle,
+                status,
+                question_count AS questionCount,
+                answered_count AS answeredCount,
+                total_score AS totalScore,
+                report_summary AS reportSummary,
+                created_at AS createdAt,
+                updated_at AS updatedAt,
+                deleted
+            FROM interview_record
+            WHERE username = #{username}
+              AND deleted = 0
+              <if test="sessionId != null and sessionId != ''">
+                AND session_id = #{sessionId}
+              </if>
+              <if test="status != null and status != ''">
+                AND status = #{status}
+              </if>
+              <if test="activeOnly != null and activeOnly">
+                AND status != 'COMPLETED'
+              </if>
+              <if test="keyword != null and keyword != ''">
+                AND (
+                  job_title LIKE CONCAT('%', #{keyword}, '%')
+                  OR session_id LIKE CONCAT('%', #{keyword}, '%')
+                )
+              </if>
+              <if test="interviewDirection != null and interviewDirection != ''">
+                AND job_title LIKE CONCAT('%', #{interviewDirection}, '%')
+              </if>
+              <if test="minScore != null">
+                AND total_score &gt;= #{minScore}
+              </if>
+              <if test="maxScore != null">
+                AND total_score &lt;= #{maxScore}
+              </if>
+            ORDER BY updated_at DESC, id DESC
+            LIMIT #{size} OFFSET #{offset}
+            </script>
+            """)
+    List<InterviewRecord> findPageByUsername(
+            @Param("username") String username,
+            @Param("sessionId") String sessionId,
+            @Param("status") String status,
+            @Param("activeOnly") Boolean activeOnly,
+            @Param("keyword") String keyword,
+            @Param("interviewDirection") String interviewDirection,
+            @Param("minScore") Integer minScore,
+            @Param("maxScore") Integer maxScore,
+            @Param("offset") int offset,
+            @Param("size") int size
+    );
+
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+            FROM interview_record
+            WHERE username = #{username}
+              AND deleted = 0
+              <if test="sessionId != null and sessionId != ''">
+                AND session_id = #{sessionId}
+              </if>
+              <if test="status != null and status != ''">
+                AND status = #{status}
+              </if>
+              <if test="activeOnly != null and activeOnly">
+                AND status != 'COMPLETED'
+              </if>
+              <if test="keyword != null and keyword != ''">
+                AND (
+                  job_title LIKE CONCAT('%', #{keyword}, '%')
+                  OR session_id LIKE CONCAT('%', #{keyword}, '%')
+                )
+              </if>
+              <if test="interviewDirection != null and interviewDirection != ''">
+                AND job_title LIKE CONCAT('%', #{interviewDirection}, '%')
+              </if>
+              <if test="minScore != null">
+                AND total_score &gt;= #{minScore}
+              </if>
+              <if test="maxScore != null">
+                AND total_score &lt;= #{maxScore}
+              </if>
+            </script>
+            """)
+    long countByUsername(
+            @Param("username") String username,
+            @Param("sessionId") String sessionId,
+            @Param("status") String status,
+            @Param("activeOnly") Boolean activeOnly,
+            @Param("keyword") String keyword,
+            @Param("interviewDirection") String interviewDirection,
+            @Param("minScore") Integer minScore,
+            @Param("maxScore") Integer maxScore
+    );
 
     @Update("""
             UPDATE interview_record

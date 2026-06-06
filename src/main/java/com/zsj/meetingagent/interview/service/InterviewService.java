@@ -1,9 +1,12 @@
 package com.zsj.meetingagent.interview.service;
 
+import com.zsj.meetingagent.common.vo.PageResponse;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
+import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.agent.vo.AgentStepResponse;
@@ -33,4 +36,22 @@ public interface InterviewService {
     InterviewRuntimeStateResponse getRuntimeState(String username, String sessionId);
 
     InterviewRuntimeStateResponse recoverRuntimeState(String username, String sessionId);
+
+    PageResponse<InterviewRecordResponse> pageInterviewRecords(
+            String username,
+            int current,
+            int size,
+            String sessionId,
+            Integer minScore,
+            Integer maxScore,
+            String interviewDirection
+    );
+
+    PageResponse<InterviewConversationResponse> pageInterviewConversations(
+            String username,
+            int current,
+            int size,
+            String status,
+            String keyword
+    );
 }

@@ -8,6 +8,7 @@ import com.zsj.meetingagent.agent.model.InterviewOrchestrationContext;
 import com.zsj.meetingagent.agent.model.InterviewOrchestrationResult;
 import com.zsj.meetingagent.agent.orchestrator.InterviewOrchestrator;
 import com.zsj.meetingagent.common.exception.BusinessException;
+import com.zsj.meetingagent.common.vo.PageResponse;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.entity.InterviewQuestionSnapshotDocument;
@@ -25,8 +26,10 @@ import com.zsj.meetingagent.interview.runtime.InterviewRuntimeService;
 import com.zsj.meetingagent.interview.runtime.InterviewRuntimeState;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
+import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
@@ -352,6 +355,86 @@ public class DefaultInterviewService implements InterviewService {
         return toRuntimeStateResponse(runtimeService.recover(username, sessionId));
     }
 
+    @Override
+    public PageResponse<InterviewRecordResponse> pageInterviewRecords(
+            String username,
+            int current,
+            int size,
+            String sessionId,
+            Integer minScore,
+            Integer maxScore,
+            String interviewDirection
+    ) {
+        int normalizedCurrent = normalizePageCurrent(current);
+        int normalizedSize = normalizePageSize(size);
+        int offset = (normalizedCurrent - 1) * normalizedSize;
+        /*
+         * 历史面试列表使用 MySQL interview_record。
+         * MongoDB 保存详细问答快照，MySQL 保存列表页需要快速扫描的结构化摘要。
+         */
+        List<InterviewRecord> records = interviewRecordMapper.findPageByUsername(
+                username,
+                blankToNull(sessionId),
+                null,
+                false,
+                null,
+                blankToNull(interviewDirection),
+                minScore,
+                maxScore,
+                offset,
+                normalizedSize
+        );
+        long total = interviewRecordMapper.countByUsername(
+                username,
+                blankToNull(sessionId),
+                null,
+                false,
+                null,
+                blankToNull(interviewDirection),
+                minScore,
+                maxScore
+        );
+        return PageResponse.of(records.stream().map(this::toRecordResponse).toList(), total, normalizedCurrent, normalizedSize);
+    }
+
+    @Override
+    public PageResponse<InterviewConversationResponse> pageInterviewConversations(
+            String username,
+            int current,
+            int size,
+            String status,
+            String keyword
+    ) {
+        int normalizedCurrent = normalizePageCurrent(current);
+        int normalizedSize = normalizePageSize(size);
+        int offset = (normalizedCurrent - 1) * normalizedSize;
+        String storedStatus = normalizeConversationStatus(status);
+        boolean activeOnly = isActiveConversationStatus(status);
+        List<InterviewRecord> records = interviewRecordMapper.findPageByUsername(
+                username,
+                null,
+                storedStatus,
+                activeOnly,
+                blankToNull(keyword),
+                null,
+                null,
+                null,
+                offset,
+                normalizedSize
+        );
+        long total = interviewRecordMapper.countByUsername(
+                username,
+                null,
+                storedStatus,
+                activeOnly,
+                blankToNull(keyword),
+                null,
+                null,
+                null
+        );
+        return PageResponse.of(records.stream().map(this::toConversationResponse).toList(), total, normalizedCurrent, normalizedSize);
+    }
+
     private InterviewSessionDocument findSession(String username, String sessionId) {
         if (!StringUtils.hasText(sessionId)) {
             throw new BusinessException("I0401", "面试会话不能为空");
@@ -411,6 +494,14 @@ public class DefaultInterviewService implements InterviewService {
             return DEFAULT_QUESTION_COUNT;
         }
         return Math.max(1, Math.min(questionCount, MAX_QUESTION_COUNT));
+    }
+
+    private int normalizePageCurrent(int current) {
+        return Math.max(1, current);
+    }
+
+    private int normalizePageSize(int size) {
+        return Math.max(1, Math.min(size, 100));
     }
 
     private int scoreAnswer(String answer) {
@@ -555,8 +646,70 @@ public class DefaultInterviewService implements InterviewService {
         );
     }
 
+    private InterviewRecordResponse toRecordResponse(InterviewRecord record) {
+        Integer score = record.totalScore();
+        return new InterviewRecordResponse(
+                record.id(),
+                0,
+                record.sessionId(),
+                80,
+                score,
+                record.status(),
+                record.questionCount(),
+                score,
+                score,
+                score,
+                record.reportSummary(),
+                record.jobTitle(),
+                record.createdAt(),
+                isCompleted(record.status()) ? record.updatedAt() : null,
+                record.createdAt(),
+                record.updatedAt()
+        );
+    }
+
+    private InterviewConversationResponse toConversationResponse(InterviewRecord record) {
+        String status = isCompleted(record.status()) ? "COMPLETED" : "IN_PROGRESS";
+        return new InterviewConversationResponse(
+                record.sessionId(),
+                record.jobTitle() + "模拟面试",
+                status,
+                record.jobTitle(),
+                record.resumeId(),
+                record.createdAt(),
+                record.updatedAt()
+        );
+    }
+
+    private boolean isCompleted(String status) {
+        return InterviewSessionStatus.COMPLETED.name().equals(status);
+    }
+
+    private String normalizeConversationStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+        String normalized = status.trim().toUpperCase();
+        if ("ACTIVE".equals(normalized) || "IN_PROGRESS".equals(normalized)) {
+            return null;
+        }
+        return normalized;
+    }
+
+    private boolean isActiveConversationStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase();
+        return "ACTIVE".equals(normalized) || "IN_PROGRESS".equals(normalized);
+    }
+
     private String blankToDefault(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
+    }
+
+    private String blankToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private String defaultModel() {

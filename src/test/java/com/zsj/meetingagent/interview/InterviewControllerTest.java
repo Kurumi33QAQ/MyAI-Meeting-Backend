@@ -3,9 +3,12 @@ package com.zsj.meetingagent.interview;
 import com.zsj.meetingagent.interview.enums.InterviewSessionStatus;
 import com.zsj.meetingagent.agent.enums.AgentStepType;
 import com.zsj.meetingagent.agent.vo.AgentStepResponse;
+import com.zsj.meetingagent.common.vo.PageResponse;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
+import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
@@ -25,6 +28,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -108,6 +112,35 @@ class InterviewControllerTest {
                 .thenReturn(new InterviewRuntimeStateResponse("session-1", InterviewSessionStatus.ANSWERING, 1, 0, 1, null, 2, InterviewRuntimeRestoreSource.HOT_REDIS, now));
         when(interviewService.recoverRuntimeState(anyString(), anyString()))
                 .thenReturn(new InterviewRuntimeStateResponse("session-1", InterviewSessionStatus.ANSWERING, 1, 0, 1, null, 2, InterviewRuntimeRestoreSource.COLD_MONGO, now));
+        when(interviewService.pageInterviewRecords(anyString(), anyInt(), anyInt(), any(), any(), any(), any()))
+                .thenReturn(PageResponse.of(List.of(new InterviewRecordResponse(
+                        1L,
+                        0,
+                        "session-1",
+                        80,
+                        90,
+                        "COMPLETED",
+                        1,
+                        90,
+                        90,
+                        90,
+                        "整体表现较好",
+                        "Java 后端开发",
+                        now,
+                        now,
+                        now,
+                        now
+                )), 1, 1, 20));
+        when(interviewService.pageInterviewConversations(anyString(), anyInt(), anyInt(), any(), any()))
+                .thenReturn(PageResponse.of(List.of(new InterviewConversationResponse(
+                        "session-1",
+                        "Java 后端开发模拟面试",
+                        "IN_PROGRESS",
+                        "Java 后端开发",
+                        "resume-1",
+                        now,
+                        now
+                )), 1, 1, 20));
 
         mockMvc.perform(post("/api/interview-sessions")
                         .header("Authorization", "Bearer " + token)
@@ -161,6 +194,17 @@ class InterviewControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.restoreSource").value("COLD_MONGO"));
+
+        mockMvc.perform(get("/api/interviews")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].sessionId").value("session-1"))
+                .andExpect(jsonPath("$.data.records[0].interviewDirection").value("Java 后端开发"));
+
+        mockMvc.perform(get("/api/interview-sessions")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].conversationTitle").value("Java 后端开发模拟面试"));
     }
 
     @Test

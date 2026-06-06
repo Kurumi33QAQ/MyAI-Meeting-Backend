@@ -2,11 +2,14 @@ package com.zsj.meetingagent.frontendadapter;
 
 import com.zsj.meetingagent.auth.security.LoginUserContext;
 import com.zsj.meetingagent.common.result.ApiResponse;
+import com.zsj.meetingagent.common.vo.PageResponse;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
+import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
+import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.resume.dto.ResumeTextRequest;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
@@ -175,25 +179,41 @@ public class LegacyInterviewController {
     }
 
     @GetMapping({"/interview/interview/records", "/interview/records"})
-    public ApiResponse<Map<String, Object>> pageInterviewRecords() {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("records", List.of());
-        payload.put("total", 0);
-        payload.put("size", 20);
-        payload.put("current", 1);
-        payload.put("pages", 0);
-        return ApiResponse.success(payload);
+    public ApiResponse<Map<String, Object>> pageInterviewRecords(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String sessionId,
+            @RequestParam(required = false) Integer minScore,
+            @RequestParam(required = false) Integer maxScore,
+            @RequestParam(required = false) String interviewDirection
+    ) {
+        PageResponse<InterviewRecordResponse> page = interviewService.pageInterviewRecords(
+                LoginUserContext.currentUsername(),
+                pageNum,
+                pageSize,
+                sessionId,
+                minScore,
+                maxScore,
+                interviewDirection
+        );
+        return ApiResponse.success(toLegacyRecordPage(page));
     }
 
     @GetMapping("/interview/conversations")
-    public ApiResponse<Map<String, Object>> pageInterviewConversations() {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("records", List.of());
-        payload.put("total", 0);
-        payload.put("size", 20);
-        payload.put("current", 1);
-        payload.put("pages", 0);
-        return ApiResponse.success(payload);
+    public ApiResponse<Map<String, Object>> pageInterviewConversations(
+            @RequestParam(defaultValue = "1") int current,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String keyword
+    ) {
+        PageResponse<InterviewConversationResponse> page = interviewService.pageInterviewConversations(
+                LoginUserContext.currentUsername(),
+                current,
+                size,
+                status,
+                keyword
+        );
+        return ApiResponse.success(toLegacyConversationPage(page));
     }
 
     @GetMapping("/interview/sessions/{sessionId}/radar-chart")
@@ -237,6 +257,59 @@ public class LegacyInterviewController {
         payload.put("totalScore", response.totalScore());
         payload.put("reportSummary", response.reportSummary());
         payload.put("questions", response.questions().stream().map(this::toLegacyQuestion).toList());
+        return payload;
+    }
+
+    private Map<String, Object> toLegacyRecordPage(PageResponse<InterviewRecordResponse> page) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("records", page.records().stream().map(this::toLegacyRecordItem).toList());
+        payload.put("total", page.total());
+        payload.put("size", page.size());
+        payload.put("current", page.current());
+        payload.put("pages", page.pages());
+        return payload;
+    }
+
+    private Map<String, Object> toLegacyRecordItem(InterviewRecordResponse record) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("id", record.id());
+        payload.put("userId", record.userId());
+        payload.put("sessionId", record.sessionId());
+        payload.put("resumeScore", record.resumeScore());
+        payload.put("interviewScore", record.interviewScore());
+        payload.put("interviewStatus", record.interviewStatus());
+        payload.put("questionCount", record.questionCount());
+        payload.put("compositeScore", record.compositeScore());
+        payload.put("totalScore", record.totalScore());
+        payload.put("finalScore", record.finalScore());
+        payload.put("interviewSuggestions", record.interviewSuggestions());
+        payload.put("interviewDirection", record.interviewDirection());
+        payload.put("startTime", record.startTime());
+        payload.put("endTime", record.endTime());
+        payload.put("createTime", record.createTime());
+        payload.put("updateTime", record.updateTime());
+        return payload;
+    }
+
+    private Map<String, Object> toLegacyConversationPage(PageResponse<InterviewConversationResponse> page) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("records", page.records().stream().map(this::toLegacyConversationItem).toList());
+        payload.put("total", page.total());
+        payload.put("size", page.size());
+        payload.put("current", page.current());
+        payload.put("pages", page.pages());
+        return payload;
+    }
+
+    private Map<String, Object> toLegacyConversationItem(InterviewConversationResponse item) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sessionId", item.sessionId());
+        payload.put("conversationTitle", item.conversationTitle());
+        payload.put("status", item.status());
+        payload.put("interviewType", item.interviewType());
+        payload.put("resumeFileUrl", item.resumeFileUrl());
+        payload.put("createTime", item.createTime());
+        payload.put("updateTime", item.updateTime());
         return payload;
     }
 
