@@ -1,4 +1,7 @@
 *.md
+!README.md
+!docs/
+!docs/**/*.md
 *.log
 *.err
 .env
