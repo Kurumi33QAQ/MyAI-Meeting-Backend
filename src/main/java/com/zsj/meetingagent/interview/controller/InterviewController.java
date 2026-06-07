@@ -13,7 +13,12 @@ import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.agent.vo.AgentStepResponse;
+import com.zsj.meetingagent.resume.service.ResumeService;
+import com.zsj.meetingagent.resume.vo.ResumePreviewResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,7 +27,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 模拟面试接口控制器。
@@ -33,9 +40,11 @@ import java.util.List;
 public class InterviewController {
 
     private final InterviewService interviewService;
+    private final ResumeService resumeService;
 
-    public InterviewController(InterviewService interviewService) {
+    public InterviewController(InterviewService interviewService, ResumeService resumeService) {
         this.interviewService = interviewService;
+        this.resumeService = resumeService;
     }
 
     @PostMapping("/api/interview-sessions")
@@ -99,6 +108,19 @@ public class InterviewController {
         return ApiResponse.success(interviewService.getSession(LoginUserContext.currentUsername(), sessionId));
     }
 
+    @GetMapping("/api/interview-sessions/{sessionId}/restore")
+    public ApiResponse<Map<String, Object>> restoreSession(@PathVariable String sessionId) {
+        InterviewSessionResponse session = interviewService.getSession(LoginUserContext.currentUsername(), sessionId);
+        return ApiResponse.success(toRestorePayload(session));
+    }
+
+    @GetMapping("/api/interview-sessions/{sessionId}/resume/preview")
+    public ResponseEntity<byte[]> previewResume(@PathVariable String sessionId) {
+        InterviewSessionResponse session = interviewService.getSession(LoginUserContext.currentUsername(), sessionId);
+        ResumePreviewResponse preview = resumeService.getResumePreview(LoginUserContext.currentUsername(), session.resumeId());
+        return buildPdfPreviewResponse(preview);
+    }
+
     @GetMapping("/api/interviews/{sessionId}/report")
     public ApiResponse<InterviewReportResponse> getReport(@PathVariable String sessionId) {
         return ApiResponse.success(interviewService.getReport(LoginUserContext.currentUsername(), sessionId));
@@ -117,5 +139,31 @@ public class InterviewController {
     @PostMapping("/api/interview-sessions/{sessionId}/recover")
     public ApiResponse<InterviewRuntimeStateResponse> recoverRuntimeState(@PathVariable String sessionId) {
         return ApiResponse.success(interviewService.recoverRuntimeState(LoginUserContext.currentUsername(), sessionId));
+    }
+
+    private Map<String, Object> toRestorePayload(InterviewSessionResponse session) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sessionId", session.sessionId());
+        payload.put("status", session.status());
+        payload.put("canResume", !session.status().name().equals("COMPLETED"));
+        payload.put("resumeFileUrl", session.resumeId());
+        payload.put("resumeScore", 80);
+        payload.put("interviewType", session.jobTitle());
+        Map<String, String> suggestions = new LinkedHashMap<>();
+        session.questions().forEach(question -> suggestions.put(
+                String.valueOf(question.questionOrder()),
+                question.evaluationPoints()
+        ));
+        payload.put("suggestions", suggestions);
+        return payload;
+    }
+
+    private ResponseEntity<byte[]> buildPdfPreviewResponse(ResumePreviewResponse preview) {
+        String safeFileName = preview.fileName().replace("\"", "");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFileName + "\"")
+                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(preview.bytes().length))
+                .contentType(MediaType.parseMediaType(preview.contentType()))
+                .body(preview.bytes());
     }
 }

@@ -22,9 +22,11 @@ import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
@@ -100,6 +102,34 @@ class AgentRunControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.runId").value("run-1"))
                 .andExpect(jsonPath("$.data.steps.length()").value(4));
+
+        mockMvc.perform(post("/api/xunzhi/v1/agents/sessions")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "agentId": 1,
+                                  "firstMessage": "现在几点"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sessionId", not(blankOrNullString())));
+
+        var legacyStreamResult = mockMvc.perform(post("/api/xunzhi/v1/agents/sessions/session-1/chat")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-1",
+                                  "inputMessage": "现在几点",
+                                  "agentId": 1
+                                }
+                                """))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(legacyStreamResult))
+                .andExpect(status().isOk());
     }
 
     @Test

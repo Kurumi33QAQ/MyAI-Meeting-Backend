@@ -13,6 +13,7 @@ import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.entity.InterviewQuestionSnapshotDocument;
 import com.zsj.meetingagent.interview.entity.InterviewSessionDocument;
 import com.zsj.meetingagent.interview.enums.InterviewSessionStatus;
+import com.zsj.meetingagent.interview.followup.FollowUpQuestionGenerator;
 import com.zsj.meetingagent.interview.mapper.InterviewRecordMapper;
 import com.zsj.meetingagent.interview.prompt.InterviewPromptBuilder;
 import com.zsj.meetingagent.interview.repository.InterviewQuestionSnapshotRepository;
@@ -21,10 +22,14 @@ import com.zsj.meetingagent.interview.rule.FollowUpDecision;
 import com.zsj.meetingagent.interview.rule.FollowUpDecisionService;
 import com.zsj.meetingagent.interview.rule.FollowUpRuleTrace;
 import com.zsj.meetingagent.interview.runtime.InterviewRuntimeService;
+import com.zsj.meetingagent.interview.adaptive.DefaultInterviewProgressPolicy;
+import com.zsj.meetingagent.interview.scoring.DefaultAnswerScoringService;
 import com.zsj.meetingagent.interview.service.impl.DefaultInterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
+import com.zsj.meetingagent.knowledge.model.JobIntelligenceReport;
+import com.zsj.meetingagent.knowledge.service.JobIntelligenceSearchService;
 import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
 import com.zsj.meetingagent.rag.service.RetrievalService;
 import com.zsj.meetingagent.resume.service.ResumeService;
@@ -80,6 +85,12 @@ class DefaultInterviewServiceTest {
     @Mock
     private FollowUpDecisionService followUpDecisionService;
 
+    @Mock
+    private JobIntelligenceSearchService jobIntelligenceSearchService;
+
+    @Mock
+    private FollowUpQuestionGenerator followUpQuestionGenerator;
+
     @Test
     void createGenerateAnswerAndReport() {
         AtomicReference<InterviewSessionDocument> sessionRef = new AtomicReference<>();
@@ -119,6 +130,8 @@ class DefaultInterviewServiceTest {
         when(runtimeService.recordSnapshot(any(), any(), anyString(), anyString())).thenReturn(null);
         when(retrievalService.retrieveForInterview(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(List.of());
+        when(jobIntelligenceSearchService.search(anyString(), anyString(), anyString()))
+                .thenReturn(JobIntelligenceReport.disabled("测试环境未启用联网搜索"));
         when(interviewOrchestrator.designQuestions(any())).thenReturn(new InterviewOrchestrationResult(
                 "agent-run-1",
                 List.of(new InterviewAgentOutput("简历分析 Agent", "发现 Java 项目经历", "适合追问项目真实性")),
@@ -135,10 +148,10 @@ class DefaultInterviewServiceTest {
         when(interviewOrchestrator.reviewAnswer(anyString(), anyString(), anyString(), anyString(), anyInt(), anyString()))
                 .thenReturn(new InterviewAgentOutput("回答评估 Agent", "回答质量较好，得分：90", "命中项目和技术细节"));
         when(followUpDecisionService.decide(any())).thenReturn(new FollowUpDecision(
-                true,
-                "请补充一个具体量化结果。",
-                "缺少量化结果",
-                List.of(new FollowUpRuleTrace("缺失考点判断节点", true, "回答缺少量化结果"))
+                false,
+                null,
+                "当前回答信息充足，无需追问",
+                List.of(new FollowUpRuleTrace("追问决策节点", false, "当前回答信息充足"))
         ));
         DefaultInterviewService service = new DefaultInterviewService(
                 resumeService,
@@ -152,7 +165,11 @@ class DefaultInterviewServiceTest {
                 knowledgeIngestionService,
                 retrievalService,
                 interviewOrchestrator,
-                followUpDecisionService
+                followUpDecisionService,
+                jobIntelligenceSearchService,
+                new DefaultAnswerScoringService(),
+                new DefaultInterviewProgressPolicy(),
+                followUpQuestionGenerator
         );
 
         InterviewSessionResponse created = service.createSession("alice", new CreateInterviewSessionRequest(
@@ -165,16 +182,16 @@ class DefaultInterviewServiceTest {
         InterviewSessionResponse generated = service.generateQuestions("alice", created.sessionId());
         InterviewAnswerResponse answer = service.submitAnswer("alice", created.sessionId(), new SubmitInterviewAnswerRequest(
                 generated.questions().getFirst().questionId(),
-                "我负责 Java Spring Boot 项目接口设计，使用 MySQL 和 Redis 优化查询耗时，并通过指标观察将接口耗时降低。"
+                "我负责 Java Spring Boot 项目的接口设计，因为原查询存在慢 SQL，所以通过日志和压测定位问题，增加 MySQL 联合索引并使用 Redis 缓存，将接口耗时从 300ms 降低到 80ms。"
         ));
 
         assertThat(created.status()).isEqualTo(InterviewSessionStatus.CREATED);
         assertThat(generated.questions()).hasSize(1);
         assertThat(generated.questions().getFirst().agentRunId()).isEqualTo("agent-run-1");
         assertThat(answer.status()).isEqualTo(InterviewSessionStatus.COMPLETED);
-        assertThat(answer.score()).isGreaterThanOrEqualTo(90);
-        assertThat(answer.followUpRuleTrace()).contains("缺失考点判断节点");
-        assertThat(service.getReport("alice", created.sessionId()).totalScore()).isGreaterThanOrEqualTo(90);
+        assertThat(answer.score()).isGreaterThanOrEqualTo(85);
+        assertThat(answer.followUpRuleTrace()).contains("追问决策节点");
+        assertThat(service.getReport("alice", created.sessionId()).totalScore()).isGreaterThanOrEqualTo(85);
         assertThat(questionCaptor.getValue().getUserAnswer()).contains("Spring Boot");
     }
 
@@ -192,7 +209,11 @@ class DefaultInterviewServiceTest {
                 knowledgeIngestionService,
                 retrievalService,
                 interviewOrchestrator,
-                followUpDecisionService
+                followUpDecisionService,
+                jobIntelligenceSearchService,
+                new DefaultAnswerScoringService(),
+                new DefaultInterviewProgressPolicy(),
+                followUpQuestionGenerator
         );
         when(runtimeService.recover(anyString(), anyString())).thenReturn(new com.zsj.meetingagent.interview.runtime.InterviewRuntimeState(
                 "session-1",

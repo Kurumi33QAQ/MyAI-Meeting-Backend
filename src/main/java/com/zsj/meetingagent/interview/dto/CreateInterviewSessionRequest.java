@@ -7,14 +7,14 @@ import jakarta.validation.constraints.Size;
 
 /**
  * 创建模拟面试会话请求。
- * resumeId 关联已上传简历，岗位名称和 JD 用于生成更贴近目标岗位的问题。
+ * resumeId 关联已上传简历；岗位、公司和 JD 均为可选。
+ * 用户不填写岗位信息时，系统只根据简历生成题目，不补默认岗位。
  */
 public record CreateInterviewSessionRequest(
         @NotBlank(message = "不能为空")
         @Size(max = 80, message = "长度不能超过 80 个字符")
         String resumeId,
 
-        @NotBlank(message = "不能为空")
         @Size(max = 120, message = "长度不能超过 120 个字符")
         String jobTitle,
 

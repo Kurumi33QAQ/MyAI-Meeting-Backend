@@ -13,6 +13,8 @@ import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.interview.runtime.InterviewRuntimeRestoreSource;
+import com.zsj.meetingagent.resume.service.ResumeService;
+import com.zsj.meetingagent.resume.vo.ResumePreviewResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -50,6 +52,9 @@ class InterviewControllerTest {
     @MockBean
     private InterviewService interviewService;
 
+    @MockBean
+    private ResumeService resumeService;
+
     @Test
     void interviewEndpointsRequireLogin() throws Exception {
         mockMvc.perform(post("/api/interview-sessions")
@@ -82,7 +87,11 @@ class InterviewControllerTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 now,
+                null,
                 null
         );
         InterviewSessionResponse session = new InterviewSessionResponse(
@@ -103,7 +112,7 @@ class InterviewControllerTest {
         when(interviewService.createSession(anyString(), any())).thenReturn(session);
         when(interviewService.generateQuestions(anyString(), anyString())).thenReturn(session);
         when(interviewService.submitAnswer(anyString(), anyString(), any()))
-                .thenReturn(new InterviewAnswerResponse("session-1", "question-1", 90, "回答较完整", "请补充性能指标", "缺失考点判断节点[命中]", InterviewSessionStatus.COMPLETED, 1, 1));
+                .thenReturn(new InterviewAnswerResponse("session-1", "question-1", 90, "回答较完整", "请补充性能指标", "缺失考点判断节点[命中]", InterviewSessionStatus.ANSWERING, 1, 8));
         when(interviewService.getReport(anyString(), anyString()))
                 .thenReturn(new InterviewReportResponse("session-1", InterviewSessionStatus.COMPLETED, 90, 1, 1, "整体表现较好", List.of(question)));
         when(interviewService.listAgentTraces(anyString(), anyString()))
@@ -141,6 +150,9 @@ class InterviewControllerTest {
                         now,
                         now
                 )), 1, 1, 20));
+        when(interviewService.getSession(anyString(), anyString())).thenReturn(session);
+        when(resumeService.getResumePreview(anyString(), anyString()))
+                .thenReturn(new ResumePreviewResponse("resume.pdf", "application/pdf", "%PDF-1.4\n%%EOF".getBytes()));
 
         mockMvc.perform(post("/api/interview-sessions")
                         .header("Authorization", "Bearer " + token)
@@ -175,6 +187,32 @@ class InterviewControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.score").value(90));
 
+        mockMvc.perform(post("/api/xunzhi/v1/interview/sessions/session-1/interview/answer-json")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "questionNumber": "question-1",
+                                  "answerContent": "我先说明性能优化过程。"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.answeredCount").value(1))
+                .andExpect(jsonPath("$.data.questionCount").value(8))
+                .andExpect(jsonPath("$.data.isFollowUp").value(true))
+                .andExpect(jsonPath("$.data.nextQuestionNumber").value("question-1-F1"));
+
+        mockMvc.perform(get("/api/interview-sessions/session-1/restore")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sessionId").value("session-1"))
+                .andExpect(jsonPath("$.data.canResume").value(true))
+                .andExpect(jsonPath("$.data.resumeFileUrl").value("resume-1"));
+
+        mockMvc.perform(get("/api/interview-sessions/session-1/resume/preview")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
         mockMvc.perform(get("/api/interviews/session-1/report")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -205,6 +243,16 @@ class InterviewControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records[0].conversationTitle").value("Java 后端开发模拟面试"));
+
+        mockMvc.perform(get("/api/xunzhi/v1/interview/sessions/session-1/restore")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sessionId").value("session-1"))
+                .andExpect(jsonPath("$.data.resumeFileUrl").value("resume-1"));
+
+        mockMvc.perform(get("/api/xunzhi/v1/interview/sessions/session-1/resume/preview")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
     }
 
     @Test

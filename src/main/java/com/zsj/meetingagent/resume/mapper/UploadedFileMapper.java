@@ -18,10 +18,10 @@ public interface UploadedFileMapper {
     @Insert("""
             INSERT INTO uploaded_file (
                 file_id, username, file_name, content_type, file_size, document_type,
-                text_content, summary, created_at, updated_at, deleted
+                file_bytes, text_content, summary, created_at, updated_at, deleted
             ) VALUES (
                 #{file.fileId}, #{file.username}, #{file.fileName}, #{file.contentType}, #{file.fileSize},
-                #{file.documentType}, #{file.textContent}, #{file.summary}, #{file.createdAt}, #{file.updatedAt}, #{file.deleted}
+                #{file.documentType}, #{file.fileBytes}, #{file.textContent}, #{file.summary}, #{file.createdAt}, #{file.updatedAt}, #{file.deleted}
             )
             """)
     int insert(@Param("file") UploadedFile file);
@@ -35,6 +35,7 @@ public interface UploadedFileMapper {
                 content_type AS contentType,
                 file_size AS fileSize,
                 document_type AS documentType,
+                file_bytes AS fileBytes,
                 text_content AS textContent,
                 summary,
                 created_at AS createdAt,

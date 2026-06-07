@@ -14,6 +14,7 @@ public record UploadedFile(
         String contentType,
         Long fileSize,
         String documentType,
+        byte[] fileBytes,
         String textContent,
         String summary,
         Instant createdAt,

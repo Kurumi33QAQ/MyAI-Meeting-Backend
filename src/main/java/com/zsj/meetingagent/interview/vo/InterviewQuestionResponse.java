@@ -21,8 +21,12 @@ public record InterviewQuestionResponse(
         Integer score,
         String feedback,
         String followUpQuestion,
+        String followUpAnswer,
+        Integer followUpScore,
+        String followUpFeedback,
         String followUpRuleTrace,
         Instant createdAt,
-        Instant answeredAt
+        Instant answeredAt,
+        Instant followUpAnsweredAt
 ) {
 }

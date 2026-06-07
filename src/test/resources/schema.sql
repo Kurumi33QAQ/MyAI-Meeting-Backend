@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     content_type VARCHAR(120),
     file_size BIGINT NOT NULL DEFAULT 0,
     document_type VARCHAR(32) NOT NULL,
+    file_bytes BLOB,
     text_content CLOB NOT NULL,
     summary VARCHAR(1000),
     created_at TIMESTAMP NOT NULL,

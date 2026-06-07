@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * 默认结构化 chunk 服务。
- * 阶段 7 先按业务章节切分，避免简单按固定字数切断项目经历和 JD 要求。
+ * 按简历和 JD 的业务章节切分文本，尽量保留一个章节内的上下文连续性，避免固定字数切断项目经历。
  */
 @Service
 public class DefaultStructuredChunkService implements StructuredChunkService {
@@ -79,10 +79,7 @@ public class DefaultStructuredChunkService implements StructuredChunkService {
         List<StructuredChunk> chunks = new ArrayList<>();
         int order = 1;
         for (Map.Entry<String, List<String>> entry : sectionKeywords.entrySet()) {
-            List<String> matched = paragraphs.stream()
-                    .filter(paragraph -> containsAny(paragraph, entry.getValue()))
-                    .toList();
-            String content = String.join("\n", matched);
+            String content = extractSection(paragraphs, sectionKeywords, entry.getValue());
             if (StringUtils.hasText(content)) {
                 addSectionChunks(chunks, documentType, entry.getKey(), order, content, fallbackTag);
                 order++;
@@ -92,6 +89,45 @@ public class DefaultStructuredChunkService implements StructuredChunkService {
             addSectionChunks(chunks, documentType, "全文摘要", order, text, fallbackTag);
         }
         return chunks;
+    }
+
+    private String extractSection(
+            List<String> paragraphs,
+            Map<String, List<String>> allSectionKeywords,
+            List<String> currentKeywords
+    ) {
+        List<String> result = new ArrayList<>();
+        for (int index = 0; index < paragraphs.size(); index++) {
+            String paragraph = paragraphs.get(index);
+            if (!containsAny(paragraph, currentKeywords)) {
+                continue;
+            }
+            /*
+             * 找到章节标题后，继续收集后续正文，直到遇到下一个短标题。
+             * 这比“只收集含关键词的行”更适合简历项目经历，因为技术细节通常在标题后的多行描述里。
+             */
+            for (int cursor = index; cursor < paragraphs.size(); cursor++) {
+                String current = paragraphs.get(cursor);
+                if (cursor > index && isOtherSectionHeading(current, allSectionKeywords, currentKeywords)) {
+                    break;
+                }
+                result.add(current);
+            }
+        }
+        return String.join("\n", result);
+    }
+
+    private boolean isOtherSectionHeading(
+            String paragraph,
+            Map<String, List<String>> allSectionKeywords,
+            List<String> currentKeywords
+    ) {
+        if (paragraph.length() > 40) {
+            return false;
+        }
+        return allSectionKeywords.values().stream()
+                .filter(keywords -> keywords != currentKeywords)
+                .anyMatch(keywords -> containsAny(paragraph, keywords));
     }
 
     private void addSectionChunks(

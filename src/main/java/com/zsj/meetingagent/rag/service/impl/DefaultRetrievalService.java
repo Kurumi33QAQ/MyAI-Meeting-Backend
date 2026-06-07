@@ -72,15 +72,25 @@ public class DefaultRetrievalService implements RetrievalService {
             String companyName,
             String jobDescription
     ) {
-        String query = """
-                目标岗位：%s
-                目标公司：%s
-                岗位描述：%s
-                请召回候选人简历和岗位 JD 中能支撑模拟面试出题的证据。
-                """.formatted(blankToDefault(jobTitle, "未填写"), blankToDefault(companyName, "未填写"), blankToDefault(jobDescription, ""));
+        boolean hasJobContext = StringUtils.hasText(jobTitle)
+                || StringUtils.hasText(companyName)
+                || StringUtils.hasText(jobDescription);
+        String query = hasJobContext
+                ? """
+                  目标岗位：%s
+                  目标公司：%s
+                  岗位描述：%s
+                  请召回候选人简历、岗位 JD 和公开岗位情报中能支撑模拟面试出题的证据。
+                  """.formatted(blankToDefault(jobTitle, "未填写"), blankToDefault(companyName, "未填写"), blankToDefault(jobDescription, ""))
+                : """
+                  用户未填写目标岗位、公司或 JD。
+                  请只召回候选人简历和面试题知识库中能支撑项目经历、技能、职责和技术取舍追问的证据。
+                  """;
         RetrieveEvidenceResponse response = retrieve(username, new RetrieveEvidenceRequest(
                 query,
-                List.of("RESUME", "JOB_DESCRIPTION", "QUESTION_BANK"),
+                hasJobContext
+                        ? List.of("RESUME", "JOB_DESCRIPTION", "QUESTION_BANK")
+                        : List.of("RESUME", "QUESTION_BANK"),
                 20,
                 5
         ));

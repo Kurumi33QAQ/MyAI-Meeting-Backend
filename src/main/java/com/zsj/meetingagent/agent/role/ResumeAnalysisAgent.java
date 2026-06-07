@@ -26,10 +26,10 @@ public class ResumeAnalysisAgent implements InterviewAgentRole {
                 .filter(evidence -> "RESUME".equalsIgnoreCase(evidence.documentType()))
                 .toList();
         String skillSignal = containsAny(context.resume().summary(), "Spring", "Spring Boot", "MySQL", "Redis")
-                ? "简历中出现 Java 后端常见技术栈，可优先追问真实项目职责和技术取舍。"
-                : "简历技术栈信号不够明确，需要先追问候选人最熟悉的后端项目。";
+                ? "简历中出现后端开发技术栈，可优先追问真实项目职责和技术取舍。"
+                : "简历技术方向信号不够明确，需要先追问候选人最熟悉的项目或实践经历。";
         String evidenceSummary = resumeEvidence.isEmpty()
-                ? "暂无简历 evidence，后续应补充真实 PDF 解析和结构化简历字段。"
+                ? "暂无简历 evidence，需要优先核对简历解析结果，不能假设候选人的技术方向。"
                 : "命中简历证据 " + resumeEvidence.size() + " 条，重点章节：" + resumeEvidence.stream()
                 .map(EvidenceResponse::sectionName)
                 .distinct()

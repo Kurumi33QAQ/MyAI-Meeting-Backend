@@ -85,6 +85,13 @@ app:
     default-top-k: ${RAG_DEFAULT_TOP_K:20}
     default-final-k: ${RAG_DEFAULT_FINAL_K:5}
     min-confidence: ${RAG_MIN_CONFIDENCE:0.15}
+  job-intelligence:
+    enabled: ${JOB_INTELLIGENCE_SEARCH_ENABLED:true}
+    provider: ${JOB_INTELLIGENCE_PROVIDER:tavily}
+    base-url: ${TAVILY_BASE_URL:https://api.tavily.com}
+    api-key: ${TAVILY_API_KEY:}
+    max-results: ${JOB_INTELLIGENCE_MAX_RESULTS:5}
+    timeout: ${JOB_INTELLIGENCE_TIMEOUT:8s}
   evaluation:
     default-dataset-path: ${EVALUATION_DATASET_PATH:classpath:evaluation/eval_cases.json}
     report-dir: ${EVALUATION_REPORT_DIR:reports/evaluation}

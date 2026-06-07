@@ -2,6 +2,7 @@ package com.zsj.meetingagent.interview.rule.node;
 
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import com.yomahub.liteflow.core.NodeComponent;
+import com.zsj.meetingagent.interview.rule.ContextualFollowUpQuestionFactory;
 import com.zsj.meetingagent.interview.rule.FollowUpRuleContext;
 import org.springframework.util.StringUtils;
 
@@ -24,8 +25,13 @@ public class MissingPointCheckNode extends NodeComponent {
             context.propose("缺失考点判断节点", "请补充你在这个项目中的具体职责，以及你亲自完成的开发、设计或排查工作。", "回答没有体现个人职责和真实贡献。", false);
             return;
         }
-        if (!containsAny(answer, "指标", "耗时", "QPS", "错误率", "提升", "降低", "数据")) {
-            context.propose("缺失考点判断节点", "请补充一个量化结果，例如响应时间、错误率、查询耗时、QPS 或上线后的效果变化。", "回答缺少量化结果，结果意识不足。", false);
+        if (!ContextualFollowUpQuestionFactory.containsMetric(answer)) {
+            context.propose(
+                    "缺失考点判断节点",
+                    ContextualFollowUpQuestionFactory.buildMetricQuestion(answer),
+                    "回答缺少可验证的量化结果，结果意识不足。",
+                    false
+            );
             return;
         }
         context.addTrace("缺失考点判断节点", false, "回答已覆盖职责、过程或量化信息。");

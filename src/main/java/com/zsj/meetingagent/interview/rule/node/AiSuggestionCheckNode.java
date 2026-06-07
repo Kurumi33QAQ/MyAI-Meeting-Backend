@@ -2,6 +2,7 @@ package com.zsj.meetingagent.interview.rule.node;
 
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import com.yomahub.liteflow.core.NodeComponent;
+import com.zsj.meetingagent.interview.rule.ContextualFollowUpQuestionFactory;
 import com.zsj.meetingagent.interview.rule.FollowUpRuleContext;
 
 /**
@@ -18,7 +19,7 @@ public class AiSuggestionCheckNode extends NodeComponent {
         if (containsAny(aiFeedback, "缺", "不足", "补充", "没有命中", "需要")) {
             context.propose(
                     "AI 建议判断节点",
-                    "根据刚才的反馈，请补充你没有展开的技术细节，并说明这个方案为什么适合当时的业务场景。",
+                    ContextualFollowUpQuestionFactory.forAiFeedback(context),
                     "AI 反馈指出回答仍有缺失，需要追问补齐。",
                     false
             );

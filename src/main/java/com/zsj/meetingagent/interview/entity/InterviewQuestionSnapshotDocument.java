@@ -54,6 +54,17 @@ public class InterviewQuestionSnapshotDocument {
     private String followUpQuestion;
 
     /**
+     * 追问作为独立可回答回合保存，但仍归属于当前主问题，不重复计入主问题完成数量。
+     */
+    private String followUpAnswer;
+
+    private Integer followUpScore;
+
+    private String followUpFeedback;
+
+    private Instant followUpAnsweredAt;
+
+    /**
      * LiteFlow 追问规则链轨迹。
      * 记录每个规则节点是否命中，方便解释为什么追问或为什么不追问。
      */
@@ -181,6 +192,38 @@ public class InterviewQuestionSnapshotDocument {
 
     public void setFollowUpQuestion(String followUpQuestion) {
         this.followUpQuestion = followUpQuestion;
+    }
+
+    public String getFollowUpAnswer() {
+        return followUpAnswer;
+    }
+
+    public void setFollowUpAnswer(String followUpAnswer) {
+        this.followUpAnswer = followUpAnswer;
+    }
+
+    public Integer getFollowUpScore() {
+        return followUpScore;
+    }
+
+    public void setFollowUpScore(Integer followUpScore) {
+        this.followUpScore = followUpScore;
+    }
+
+    public String getFollowUpFeedback() {
+        return followUpFeedback;
+    }
+
+    public void setFollowUpFeedback(String followUpFeedback) {
+        this.followUpFeedback = followUpFeedback;
+    }
+
+    public Instant getFollowUpAnsweredAt() {
+        return followUpAnsweredAt;
+    }
+
+    public void setFollowUpAnsweredAt(Instant followUpAnsweredAt) {
+        this.followUpAnsweredAt = followUpAnsweredAt;
     }
 
     public String getFollowUpRuleTrace() {

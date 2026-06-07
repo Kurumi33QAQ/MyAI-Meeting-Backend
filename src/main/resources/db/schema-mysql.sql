@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     content_type VARCHAR(120) COMMENT '文件 MIME 类型',
     file_size BIGINT NOT NULL DEFAULT 0 COMMENT '文件大小，单位字节',
     document_type VARCHAR(32) NOT NULL COMMENT '文档类型，当前 RESUME 表示简历',
+    file_bytes LONGBLOB COMMENT '原始文件二进制内容，用于前端简历预览',
     text_content MEDIUMTEXT NOT NULL COMMENT '解析后的文本内容，阶段6先保存文本简历正文',
     summary VARCHAR(1000) COMMENT '简历摘要，供面试题生成和列表展示使用',
     created_at DATETIME(6) NOT NULL COMMENT '创建时间',

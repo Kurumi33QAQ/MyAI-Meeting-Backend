@@ -5,6 +5,7 @@
 !.env.example
 reports/
 stage*-response.txt
+stage*-questions.json
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/

@@ -14,10 +14,14 @@ import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
 import com.zsj.meetingagent.resume.dto.ResumeTextRequest;
 import com.zsj.meetingagent.resume.service.ResumeService;
+import com.zsj.meetingagent.resume.vo.ResumePreviewResponse;
 import com.zsj.meetingagent.resume.vo.ResumeResponse;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -100,13 +104,14 @@ public class LegacyInterviewController {
             ResumeResponse resume = resumeService.uploadFile(LoginUserContext.currentUsername(), resumePdf);
             /*
              * 前端创建空会话后会继续沿用这个 sessionId，所以这里用指定 ID 创建真实面试会话。
+             * 岗位字段保持可选；没有填写时绝不补默认岗位，只根据简历生成题目。
              */
             interviewService.createSession(LoginUserContext.currentUsername(), sessionId, new CreateInterviewSessionRequest(
                     resume.resumeId(),
-                    "Java 后端开发实习生",
-                    "",
-                    "结合用户上传简历，重点考察 Java、Spring Boot、数据库、缓存、接口设计和项目表达能力。",
-                    5
+                    normalizeOptional(request.getParameter("jobTitle")),
+                    normalizeOptional(firstParameter(request, "companyName", "company")),
+                    normalizeOptional(request.getParameter("jobDescription")),
+                    null
             ));
         }
         InterviewSessionResponse response = interviewService.generateQuestions(LoginUserContext.currentUsername(), sessionId);
@@ -122,7 +127,6 @@ public class LegacyInterviewController {
         String answer = firstStringValue(request, "answer", "userAnswer", "answerContent");
         InterviewAnswerResponse response = interviewService.submitAnswer(LoginUserContext.currentUsername(), sessionId, new SubmitInterviewAnswerRequest(questionId, answer));
         InterviewSessionResponse session = interviewService.getSession(LoginUserContext.currentUsername(), sessionId);
-        InterviewQuestionResponse nextQuestion = nextUnansweredQuestion(session.questions());
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sessionId", response.sessionId());
         payload.put("questionId", response.questionId());
@@ -137,12 +141,21 @@ public class LegacyInterviewController {
         payload.put("questionCount", response.questionCount());
         payload.put("isSuccess", true);
         payload.put("finished", session.status().name().equals("COMPLETED"));
-        if (nextQuestion != null) {
+        if (StringUtils.hasText(response.followUpQuestion())) {
+            payload.put("nextQuestionNumber", followUpQuestionId(response.questionId()));
+            payload.put("nextQuestion", response.followUpQuestion());
+            payload.put("questionContent", response.followUpQuestion());
+            payload.put("isFollowUp", true);
+            payload.put("followUpCount", 1);
+        } else {
+            InterviewQuestionResponse nextQuestion = nextUnansweredQuestion(session.questions());
+            if (nextQuestion != null) {
             payload.put("nextQuestionNumber", nextQuestion.questionId());
             payload.put("nextQuestion", nextQuestion.question());
             payload.put("questionContent", nextQuestion.question());
             payload.put("isFollowUp", false);
             payload.put("followUpCount", 0);
+            }
         }
         return ApiResponse.success(payload);
     }
@@ -150,6 +163,10 @@ public class LegacyInterviewController {
     @GetMapping("/interview/sessions/{sessionId}/current-question")
     public ApiResponse<Map<String, Object>> getCurrentQuestion(@PathVariable String sessionId) {
         InterviewSessionResponse session = interviewService.getSession(LoginUserContext.currentUsername(), sessionId);
+        InterviewQuestionResponse followUpQuestion = pendingFollowUpQuestion(session.questions());
+        if (followUpQuestion != null) {
+            return ApiResponse.success(toLegacyFollowUpQuestion(session, followUpQuestion));
+        }
         InterviewQuestionResponse question = nextUnansweredQuestion(session.questions());
         return ApiResponse.success(toLegacyCurrentQuestion(session, question));
     }
@@ -157,6 +174,24 @@ public class LegacyInterviewController {
     @GetMapping("/interview/sessions/{sessionId}/next-question")
     public ApiResponse<Map<String, Object>> getNextQuestion(@PathVariable String sessionId) {
         return getCurrentQuestion(sessionId);
+    }
+
+    @GetMapping("/interview/sessions/{sessionId}/restore")
+    public ApiResponse<Map<String, Object>> restoreSession(@PathVariable String sessionId) {
+        InterviewSessionResponse session = interviewService.getSession(LoginUserContext.currentUsername(), sessionId);
+        return ApiResponse.success(toLegacyRestore(session));
+    }
+
+    @GetMapping("/interview/sessions/{sessionId}/resume/preview")
+    public ResponseEntity<byte[]> previewResume(@PathVariable String sessionId) {
+        InterviewSessionResponse session = interviewService.getSession(LoginUserContext.currentUsername(), sessionId);
+        ResumePreviewResponse preview = resumeService.getResumePreview(LoginUserContext.currentUsername(), session.resumeId());
+        String safeFileName = preview.fileName().replace("\"", "");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + safeFileName + "\"")
+                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(preview.bytes().length))
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(preview.bytes());
     }
 
     @PutMapping("/interview/sessions/{sessionId}/finish")
@@ -328,6 +363,9 @@ public class LegacyInterviewController {
         payload.put("score", question.score());
         payload.put("feedback", question.feedback());
         payload.put("followUpQuestion", question.followUpQuestion());
+        payload.put("followUpAnswer", question.followUpAnswer());
+        payload.put("followUpScore", question.followUpScore());
+        payload.put("followUpFeedback", question.followUpFeedback());
         return payload;
     }
 
@@ -362,6 +400,8 @@ public class LegacyInterviewController {
         payload.put("isSuccess", true);
         payload.put("finished", question == null || session.status().name().equals("COMPLETED"));
         payload.put("totalScore", session.totalScore());
+        payload.put("answeredCount", session.answeredCount());
+        payload.put("questionCount", session.questionCount());
         if (question != null) {
             payload.put("questionNumber", question.questionId());
             payload.put("questionContent", question.question());
@@ -370,6 +410,44 @@ public class LegacyInterviewController {
             payload.put("isFollowUp", false);
             payload.put("followUpCount", 0);
         }
+        return payload;
+    }
+
+    private Map<String, Object> toLegacyFollowUpQuestion(
+            InterviewSessionResponse session,
+            InterviewQuestionResponse question
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        String followUpId = followUpQuestionId(question.questionId());
+        payload.put("sessionId", session.sessionId());
+        payload.put("isSuccess", true);
+        payload.put("finished", false);
+        payload.put("totalScore", session.totalScore());
+        payload.put("answeredCount", session.answeredCount());
+        payload.put("questionCount", session.questionCount());
+        payload.put("questionNumber", followUpId);
+        payload.put("questionContent", question.followUpQuestion());
+        payload.put("nextQuestionNumber", followUpId);
+        payload.put("nextQuestion", question.followUpQuestion());
+        payload.put("isFollowUp", true);
+        payload.put("followUpCount", 1);
+        return payload;
+    }
+
+    private Map<String, Object> toLegacyRestore(InterviewSessionResponse session) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sessionId", session.sessionId());
+        payload.put("status", session.status());
+        payload.put("canResume", !session.status().name().equals("COMPLETED"));
+        payload.put("resumeFileUrl", session.resumeId());
+        payload.put("resumeScore", 80);
+        payload.put("interviewType", session.jobTitle());
+        Map<String, String> suggestions = new LinkedHashMap<>();
+        session.questions().forEach(question -> suggestions.put(
+                String.valueOf(question.questionOrder()),
+                question.evaluationPoints()
+        ));
+        payload.put("suggestions", suggestions);
         return payload;
     }
 
@@ -393,7 +471,7 @@ public class LegacyInterviewController {
         payload.put("reportSummary", report.reportSummary());
         payload.put("interviewSuggestions", report.reportSummary());
         payload.put("interviewSuggestionsMap", Map.of("1", report.reportSummary() == null ? "继续补充项目细节和量化结果。" : report.reportSummary()));
-        payload.put("interviewDirection", "Java 后端开发");
+        payload.put("interviewDirection", "技术岗位模拟面试");
         payload.put("radarChart", toLegacyRadar(report));
         payload.put("radarPoints", toLegacyRadar(report).get("radarPoints"));
         payload.put("qaReviews", qaReviews);
@@ -413,7 +491,11 @@ public class LegacyInterviewController {
         payload.put("isFollowUp", false);
         payload.put("followUpNeeded", question.followUpQuestion() != null);
         payload.put("followUpRuleTrace", question.followUpRuleTrace());
-        payload.put("followUpCount", 0);
+        payload.put("followUpQuestion", question.followUpQuestion());
+        payload.put("followUpAnswer", question.followUpAnswer());
+        payload.put("followUpScore", question.followUpScore());
+        payload.put("followUpFeedback", question.followUpFeedback());
+        payload.put("followUpCount", question.followUpQuestion() == null ? 0 : 1);
         return payload;
     }
 
@@ -422,14 +504,14 @@ public class LegacyInterviewController {
         List<Map<String, Object>> points = List.of(
                 Map.of("label", "简历评估", "value", 80),
                 Map.of("label", "面试表现", "value", score),
-                Map.of("label", "专业技能", "value", Math.max(60, score - 5)),
-                Map.of("label", "表达结构", "value", Math.max(60, score - 8)),
+                Map.of("label", "专业技能", "value", Math.max(0, score - 5)),
+                Map.of("label", "表达结构", "value", Math.max(0, score - 8)),
                 Map.of("label", "发展潜力", "value", Math.min(100, score + 3))
         );
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("resumeScore", 80);
         payload.put("interviewPerformance", score);
-        payload.put("professionalSkills", Math.max(60, score - 5));
+        payload.put("professionalSkills", Math.max(0, score - 5));
         payload.put("potentialIndex", Math.min(100, score + 3));
         payload.put("interviewScore", score);
         payload.put("totalScore", score);
@@ -445,6 +527,18 @@ public class LegacyInterviewController {
                 .orElse(null);
     }
 
+    private InterviewQuestionResponse pendingFollowUpQuestion(List<InterviewQuestionResponse> questions) {
+        return questions.stream()
+                .filter(question -> StringUtils.hasText(question.followUpQuestion()))
+                .filter(question -> !StringUtils.hasText(question.followUpAnswer()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String followUpQuestionId(String parentQuestionId) {
+        return parentQuestionId + "-F1";
+    }
+
     private String firstStringValue(Map<String, Object> request, String... keys) {
         for (String key : keys) {
             String value = stringValue(request, key);
@@ -453,6 +547,20 @@ public class LegacyInterviewController {
             }
         }
         return null;
+    }
+
+    private String firstParameter(HttpServletRequest request, String... names) {
+        for (String name : names) {
+            String value = request.getParameter(name);
+            if (StringUtils.hasText(value)) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private String normalizeOptional(String value) {
+        return StringUtils.hasText(value) ? value.trim() : "";
     }
 
     private String stringValue(Map<String, Object> request, String key) {

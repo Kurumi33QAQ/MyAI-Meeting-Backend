@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * 回答评估 Agent。
- * 当前先基于后端评分和 AI 建议做结构化归纳，阶段 7.6 会把是否追问交给 LiteFlow 规则链裁决。
+ * 基于后端规则评分和 AI 反馈生成评估摘要，是否追问由 LiteFlow 规则链独立裁决。
  */
 @Component
 public class AnswerReviewAgent implements InterviewAgentRole {
@@ -23,7 +23,7 @@ public class AnswerReviewAgent implements InterviewAgentRole {
         return new InterviewAgentOutput(
                 roleName(),
                 "回答评估需要同时关注考察点命中、项目真实性、量化结果和岗位匹配度。",
-                "当前阶段记录评分观察，追问决策会在阶段 7.6 交给 LiteFlow 规则链。"
+                "评估结论用于生成反馈摘要，追问决策由 LiteFlow 规则链根据分数、缺失考点和追问次数统一处理。"
         );
     }
 

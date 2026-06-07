@@ -35,6 +35,17 @@ public class InterviewSessionDocument {
 
     private int questionCount;
 
+    /**
+     * 当前会话是否由后端根据作答质量动态调整主问题数量。
+     * 用户显式指定 questionCount 时为固定题量，否则默认启用自适应模式。
+     */
+    private boolean adaptiveQuestionCount;
+
+    /**
+     * 自适应模式允许开放的最大主问题数量。
+     */
+    private int maxQuestionCount;
+
     private int answeredCount;
 
     private Integer totalScore;
@@ -109,6 +120,22 @@ public class InterviewSessionDocument {
 
     public void setQuestionCount(int questionCount) {
         this.questionCount = questionCount;
+    }
+
+    public boolean isAdaptiveQuestionCount() {
+        return adaptiveQuestionCount;
+    }
+
+    public void setAdaptiveQuestionCount(boolean adaptiveQuestionCount) {
+        this.adaptiveQuestionCount = adaptiveQuestionCount;
+    }
+
+    public int getMaxQuestionCount() {
+        return maxQuestionCount;
+    }
+
+    public void setMaxQuestionCount(int maxQuestionCount) {
+        this.maxQuestionCount = maxQuestionCount;
     }
 
     public int getAnsweredCount() {

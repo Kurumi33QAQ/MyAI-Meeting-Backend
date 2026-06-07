@@ -40,7 +40,7 @@ class FollowUpDecisionServiceTest {
         ));
 
         assertThat(decision.shouldFollowUp()).isTrue();
-        assertThat(decision.followUpQuestion()).contains("具体项目场景");
+        assertThat(decision.followUpQuestion()).contains("最熟悉的一个项目模块");
         assertThat(decision.traceSummary()).contains("低分判断节点");
     }
 
@@ -84,5 +84,78 @@ class FollowUpDecisionServiceTest {
 
         assertThat(decision.shouldFollowUp()).isFalse();
         assertThat(decision.traceSummary()).contains("追问次数限制节点");
+    }
+
+    @Test
+    void aiSuggestionProducesTechnologySpecificFollowUp() {
+        FollowUpDecision decision = followUpDecisionService.decide(new FollowUpRuleContext(
+                "session-1",
+                "question-1",
+                "请介绍你负责的后端项目",
+                "我负责登录鉴权，使用 JWT 和 Spring Security，并通过 Redis 管理 token 黑名单。",
+                88,
+                "技术栈较丰富，但需要补充技术选型理由和具体实现细节。",
+                "个人职责、技术实现、方案取舍",
+                "追问鉴权方案的完整链路",
+                List.of("evidence-1"),
+                InterviewSessionStatus.ANSWERING,
+                0,
+                1
+        ));
+
+        assertThat(decision.shouldFollowUp()).isTrue();
+        assertThat(decision.followUpQuestion())
+                .contains("Redis")
+                .contains("可验证变化")
+                .doesNotContain("你没有展开的技术细节");
+    }
+
+    @Test
+    void databaseWordDoesNotCountAsQuantitativeEvidence() {
+        FollowUpDecision decision = followUpDecisionService.decide(new FollowUpRuleContext(
+                "session-1",
+                "question-1",
+                "请介绍你的数据库设计工作",
+                "我负责数据库设计和接口开发，并实现了订单创建、库存扣减和支付状态更新模块，但暂时没有说明优化结果。",
+                80,
+                "回答基本完整。",
+                "数据库设计、索引、结果验证",
+                "追问数据库设计结果",
+                List.of("evidence-1"),
+                InterviewSessionStatus.ANSWERING,
+                0,
+                1
+        ));
+
+        assertThat(decision.shouldFollowUp()).isTrue();
+        assertThat(decision.followUpQuestion())
+                .contains("数据库方案")
+                .contains("可验证变化");
+    }
+
+    @Test
+    void redisStringAndSetAnswerGetsDataStructureSpecificFollowUp() {
+        FollowUpDecision decision = followUpDecisionService.decide(new FollowUpRuleContext(
+                "session-1",
+                "question-1",
+                "你在项目中如何使用 Redis 优化数据访问？",
+                "我没有压测过，用了 String、Set 的数据结构。",
+                65,
+                "回答提到了 Redis String 和 Set，但没有说明业务数据、key 设计和选型原因。",
+                "Redis 数据结构选型、key 设计、性能验证",
+                "继续追问 Redis 数据结构的业务用途和选型原因",
+                List.of("evidence-1"),
+                InterviewSessionStatus.ANSWERING,
+                0,
+                1
+        ));
+
+        assertThat(decision.shouldFollowUp()).isTrue();
+        assertThat(decision.followUpQuestion())
+                .contains("String")
+                .contains("Set")
+                .contains("key")
+                .contains("Hash")
+                .doesNotContain("问题现象、排查过程");
     }
 }

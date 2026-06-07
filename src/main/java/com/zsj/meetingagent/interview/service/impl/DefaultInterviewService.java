@@ -11,10 +11,14 @@ import com.zsj.meetingagent.common.exception.BusinessException;
 import com.zsj.meetingagent.common.vo.PageResponse;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
+import com.zsj.meetingagent.interview.adaptive.InterviewProgressDecision;
+import com.zsj.meetingagent.interview.adaptive.InterviewProgressPolicy;
 import com.zsj.meetingagent.interview.entity.InterviewQuestionSnapshotDocument;
 import com.zsj.meetingagent.interview.entity.InterviewRecord;
 import com.zsj.meetingagent.interview.entity.InterviewSessionDocument;
 import com.zsj.meetingagent.interview.enums.InterviewSessionStatus;
+import com.zsj.meetingagent.interview.followup.FollowUpQuestionGenerator;
+import com.zsj.meetingagent.interview.followup.FollowUpQuestionRequest;
 import com.zsj.meetingagent.interview.mapper.InterviewRecordMapper;
 import com.zsj.meetingagent.interview.prompt.InterviewPromptBuilder;
 import com.zsj.meetingagent.interview.repository.InterviewQuestionSnapshotRepository;
@@ -24,7 +28,10 @@ import com.zsj.meetingagent.interview.rule.FollowUpDecisionService;
 import com.zsj.meetingagent.interview.rule.FollowUpRuleContext;
 import com.zsj.meetingagent.interview.runtime.InterviewRuntimeService;
 import com.zsj.meetingagent.interview.runtime.InterviewRuntimeState;
+import com.zsj.meetingagent.interview.scoring.AnswerScoreResult;
+import com.zsj.meetingagent.interview.scoring.AnswerScoringService;
 import com.zsj.meetingagent.interview.service.InterviewService;
+import com.zsj.meetingagent.interview.support.InterviewFeedbackFormatter;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
@@ -32,6 +39,9 @@ import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRuntimeStateResponse;
 import com.zsj.meetingagent.interview.vo.InterviewSessionResponse;
+import com.zsj.meetingagent.knowledge.model.JobIntelligenceReport;
+import com.zsj.meetingagent.knowledge.model.JobIntelligenceSource;
+import com.zsj.meetingagent.knowledge.service.JobIntelligenceSearchService;
 import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
 import com.zsj.meetingagent.rag.service.RetrievalService;
 import com.zsj.meetingagent.rag.vo.EvidenceResponse;
@@ -53,12 +63,12 @@ import java.util.UUID;
 @Service
 public class DefaultInterviewService implements InterviewService {
 
-    private static final int DEFAULT_QUESTION_COUNT = 5;
-    private static final int MAX_QUESTION_COUNT = 10;
+    private static final int MAX_QUESTION_COUNT = 15;
     private static final int NOT_DELETED = 0;
     private static final String INTERVIEW_SYSTEM_PROMPT = """
-            你是一个中文友好的 Java 后端模拟面试官。
-            你的反馈要具体、可执行，并优先围绕候选人的项目经历和 Java 后端基础能力。
+            你是一个中文友好的技术模拟面试官。
+            你的反馈要具体、可执行，并优先围绕候选人的真实项目经历和用户实际填写的岗位要求。
+            如果用户没有填写岗位信息，不得擅自假设目标岗位或技术方向。
             """;
 
     private final ResumeService resumeService;
@@ -73,6 +83,10 @@ public class DefaultInterviewService implements InterviewService {
     private final AiModelProperties aiModelProperties;
     private final InterviewOrchestrator interviewOrchestrator;
     private final FollowUpDecisionService followUpDecisionService;
+    private final JobIntelligenceSearchService jobIntelligenceSearchService;
+    private final AnswerScoringService answerScoringService;
+    private final InterviewProgressPolicy interviewProgressPolicy;
+    private final FollowUpQuestionGenerator followUpQuestionGenerator;
 
     public DefaultInterviewService(
             ResumeService resumeService,
@@ -86,7 +100,11 @@ public class DefaultInterviewService implements InterviewService {
             KnowledgeIngestionService knowledgeIngestionService,
             RetrievalService retrievalService,
             InterviewOrchestrator interviewOrchestrator,
-            FollowUpDecisionService followUpDecisionService
+            FollowUpDecisionService followUpDecisionService,
+            JobIntelligenceSearchService jobIntelligenceSearchService,
+            AnswerScoringService answerScoringService,
+            InterviewProgressPolicy interviewProgressPolicy,
+            FollowUpQuestionGenerator followUpQuestionGenerator
     ) {
         this.resumeService = resumeService;
         this.aiChatService = aiChatService;
@@ -100,6 +118,10 @@ public class DefaultInterviewService implements InterviewService {
         this.retrievalService = retrievalService;
         this.interviewOrchestrator = interviewOrchestrator;
         this.followUpDecisionService = followUpDecisionService;
+        this.jobIntelligenceSearchService = jobIntelligenceSearchService;
+        this.answerScoringService = answerScoringService;
+        this.interviewProgressPolicy = interviewProgressPolicy;
+        this.followUpQuestionGenerator = followUpQuestionGenerator;
     }
 
     @Override
@@ -114,18 +136,29 @@ public class DefaultInterviewService implements InterviewService {
             throw new BusinessException("I0401", "面试会话不能为空");
         }
         ResumeResponse resume = resumeService.getResume(username, request.resumeId());
-        int questionCount = normalizeQuestionCount(request.questionCount());
+        boolean adaptiveQuestionCount = request.questionCount() == null;
+        int questionCount = adaptiveQuestionCount
+                ? interviewProgressPolicy.initialQuestionCount()
+                : normalizeQuestionCount(request.questionCount());
+        int maxQuestionCount = adaptiveQuestionCount
+                ? interviewProgressPolicy.questionPoolSize()
+                : questionCount;
+        String jobTitle = normalizeOptional(request.jobTitle());
+        String companyName = normalizeOptional(request.companyName());
+        String jobDescription = normalizeOptional(request.jobDescription());
         Instant now = Instant.now();
 
         InterviewSessionDocument session = new InterviewSessionDocument();
         session.setSessionId(sessionId.trim());
         session.setUsername(username);
         session.setResumeId(resume.resumeId());
-        session.setJobTitle(request.jobTitle().trim());
-        session.setCompanyName(blankToDefault(request.companyName(), ""));
-        session.setJobDescription(blankToDefault(request.jobDescription(), ""));
+        session.setJobTitle(jobTitle);
+        session.setCompanyName(companyName);
+        session.setJobDescription(jobDescription);
         session.setStatus(InterviewSessionStatus.CREATED);
         session.setQuestionCount(questionCount);
+        session.setAdaptiveQuestionCount(adaptiveQuestionCount);
+        session.setMaxQuestionCount(maxQuestionCount);
         session.setAnsweredCount(0);
         session.setCreatedAt(now);
         session.setUpdatedAt(now);
@@ -136,7 +169,7 @@ public class DefaultInterviewService implements InterviewService {
                 sessionId.trim(),
                 username,
                 resume.resumeId(),
-                request.jobTitle().trim(),
+                jobTitle,
                 InterviewSessionStatus.CREATED.name(),
                 questionCount,
                 0,
@@ -154,11 +187,17 @@ public class DefaultInterviewService implements InterviewService {
         knowledgeIngestionService.ingestJobDescription(
                 username,
                 sessionId.trim(),
-                request.jobTitle(),
-                request.companyName(),
-                request.jobDescription()
+                jobTitle,
+                companyName,
+                jobDescription
         );
-        saveRuntime(session, "CREATE_SESSION", "创建模拟面试会话，目标岗位：" + request.jobTitle().trim());
+        saveRuntime(
+                session,
+                "CREATE_SESSION",
+                hasJobContext(jobTitle, companyName, jobDescription)
+                        ? "创建模拟面试会话，用户提供了岗位上下文。"
+                        : "创建模拟面试会话，用户未填写岗位信息，本次仅根据简历出题。"
+        );
         return toSessionResponse(session, List.of());
     }
 
@@ -171,29 +210,38 @@ public class DefaultInterviewService implements InterviewService {
         List<InterviewQuestionSnapshotDocument> existing = listQuestionDocuments(username, sessionId);
         if (!existing.isEmpty()) {
             runtimeService.recordSnapshot(session, existing, "GENERATE_QUESTIONS_REUSE", "复用已生成的面试题，不重复生成");
-            return toSessionResponse(session, existing);
+            return toSessionResponse(session, visibleQuestions(session, existing));
         }
 
         ResumeResponse resume = resumeService.getResume(username, session.getResumeId());
-        List<EvidenceResponse> evidenceList = retrievalService.retrieveForInterview(
+        JobIntelligenceReport jobIntelligence = jobIntelligenceSearchService.search(
+                session.getJobTitle(),
+                session.getCompanyName(),
+                session.getJobDescription()
+        );
+        List<EvidenceResponse> evidenceList = new ArrayList<>(retrievalService.retrieveForInterview(
                 username,
                 session.getResumeId(),
                 session.getSessionId(),
                 session.getJobTitle(),
                 session.getCompanyName(),
                 session.getJobDescription()
-        );
+        ));
+        evidenceList.addAll(toJobIntelligenceEvidence(jobIntelligence));
         /*
          * AI 调用前先做 RAG 检索，把简历/JD 证据塞进 Prompt。
          * AI 建议不会直接覆盖后端题目结构，而是作为多 Agent 编排上下文的一部分。
          */
+        int generatedQuestionCount = session.isAdaptiveQuestionCount()
+                ? session.getMaxQuestionCount()
+                : session.getQuestionCount();
         String aiSuggestion = aiChatService.chat(new AiChatRequest(
                 promptBuilder.buildQuestionPrompt(
                         resume,
                         session.getJobTitle(),
                         session.getCompanyName(),
                         session.getJobDescription(),
-                        session.getQuestionCount(),
+                        generatedQuestionCount,
                         evidenceList
                 ),
                 null,
@@ -203,6 +251,7 @@ public class DefaultInterviewService implements InterviewService {
         )).answer();
         saveRuntime(session, "GENERATE_QUESTIONS_AI_CONTEXT", shorten(aiSuggestion, 500));
         saveRuntime(session, "RAG_EVIDENCE", buildEvidenceRuntimeSummary(evidenceList));
+        saveRuntime(session, "JOB_INTELLIGENCE_SEARCH", jobIntelligence.message());
 
         InterviewOrchestrationResult orchestrationResult = interviewOrchestrator.designQuestions(new InterviewOrchestrationContext(
                 username,
@@ -211,7 +260,7 @@ public class DefaultInterviewService implements InterviewService {
                 session.getJobTitle(),
                 session.getCompanyName(),
                 session.getJobDescription(),
-                session.getQuestionCount(),
+                generatedQuestionCount,
                 evidenceList,
                 aiSuggestion
         ));
@@ -225,7 +274,7 @@ public class DefaultInterviewService implements InterviewService {
         sessionRepository.save(session);
         updateRecord(session);
         saveRuntime(session, "GENERATE_QUESTIONS", "生成面试题数量：" + questions.size());
-        return toSessionResponse(session, questions);
+        return toSessionResponse(session, visibleQuestions(session, questions));
     }
 
     @Override
@@ -238,6 +287,9 @@ public class DefaultInterviewService implements InterviewService {
         if (session.getStatus() == InterviewSessionStatus.COMPLETED) {
             throw new BusinessException("I0404", "面试已完成，不能继续提交回答");
         }
+        if (isFollowUpQuestionId(request.questionId())) {
+            return submitFollowUpAnswer(username, session, request);
+        }
         InterviewQuestionSnapshotDocument question = questionRepository
                 .findByQuestionIdAndSessionIdAndUsername(request.questionId(), sessionId, username)
                 .orElseThrow(() -> new BusinessException("I0405", "面试题不存在或无权访问"));
@@ -245,8 +297,12 @@ public class DefaultInterviewService implements InterviewService {
             throw new BusinessException("I0406", "该题已经提交过回答");
         }
 
-        int score = scoreAnswer(request.answer());
-        String heuristicFeedback = buildFeedback(score, request.answer());
+        AnswerScoreResult scoreResult = answerScoringService.score(
+                question.getQuestion(),
+                question.getEvaluationPoints(),
+                request.answer()
+        );
+        int score = scoreResult.score();
         String aiFeedback = aiChatService.chat(new AiChatRequest(
                 promptBuilder.buildAnswerReviewPrompt(question.getQuestion(), request.answer(), question.getEvaluationPoints()),
                 null,
@@ -276,11 +332,31 @@ public class DefaultInterviewService implements InterviewService {
                 existingFollowUpCount(question),
                 1
         ));
+        ResumeResponse resumeContext = resumeService.getResume(username, session.getResumeId());
+        String followUpQuestion = followUpDecision.shouldFollowUp()
+                ? followUpQuestionGenerator.generate(new FollowUpQuestionRequest(
+                        sessionId,
+                        resumeContext.summary(),
+                        session.getJobTitle(),
+                        session.getCompanyName(),
+                        session.getJobDescription(),
+                        question.getQuestion(),
+                        request.answer(),
+                        question.getEvaluationPoints(),
+                        question.getFollowUpDirection(),
+                        aiFeedback,
+                        followUpDecision.followUpQuestion()
+                ))
+                : null;
 
         question.setUserAnswer(request.answer().trim());
         question.setScore(score);
-        question.setFeedback(heuristicFeedback + " AI 建议：" + shorten(aiFeedback, 220) + " 多 Agent 观察：" + reviewOutput.summary());
-        question.setFollowUpQuestion(followUpDecision.followUpQuestion());
+        question.setFeedback(InterviewFeedbackFormatter.formatMainFeedback(
+                scoreResult.feedback(),
+                aiFeedback,
+                reviewOutput.summary()
+        ));
+        question.setFollowUpQuestion(followUpQuestion);
         question.setFollowUpRuleTrace(followUpDecision.traceSummary());
         question.setAnsweredAt(Instant.now());
         questionRepository.save(question);
@@ -289,9 +365,19 @@ public class DefaultInterviewService implements InterviewService {
                 .filter(item -> StringUtils.hasText(item.getUserAnswer()))
                 .count();
         session.setAnsweredCount(answeredCount);
-        session.setStatus(answeredCount >= session.getQuestionCount() ? InterviewSessionStatus.COMPLETED : InterviewSessionStatus.ANSWERING);
-        if (session.getStatus() == InterviewSessionStatus.COMPLETED) {
-            session.setTotalScore(calculateAverageScore(username, sessionId));
+        int averageScore = calculateAverageScore(username, sessionId);
+        InterviewProgressDecision progressDecision = interviewProgressPolicy.decide(
+                session.isAdaptiveQuestionCount(),
+                answeredCount,
+                averageScore,
+                session.getQuestionCount(),
+                effectiveMaxQuestionCount(session),
+                StringUtils.hasText(followUpQuestion)
+        );
+        session.setQuestionCount(progressDecision.targetQuestionCount());
+        session.setStatus(progressDecision.complete() ? InterviewSessionStatus.COMPLETED : InterviewSessionStatus.ANSWERING);
+        if (progressDecision.complete()) {
+            session.setTotalScore(averageScore);
             session.setReportSummary(buildReportSummary(session.getTotalScore(), answeredCount, session.getQuestionCount()));
             session.setCompletedAt(Instant.now());
         }
@@ -300,6 +386,7 @@ public class DefaultInterviewService implements InterviewService {
         updateRecord(session);
         saveRuntime(session, "SUBMIT_ANSWER", "提交第 " + question.getQuestionOrder() + " 题，评分：" + score);
         saveRuntime(session, "FOLLOW_UP_RULE_TRACE", followUpDecision.traceSummary());
+        saveRuntime(session, "ADAPTIVE_PROGRESS", progressDecision.reason());
 
         return new InterviewAnswerResponse(
                 sessionId,
@@ -314,17 +401,97 @@ public class DefaultInterviewService implements InterviewService {
         );
     }
 
+    private InterviewAnswerResponse submitFollowUpAnswer(
+            String username,
+            InterviewSessionDocument session,
+            SubmitInterviewAnswerRequest request
+    ) {
+        String parentQuestionId = parentQuestionId(request.questionId());
+        InterviewQuestionSnapshotDocument question = questionRepository
+                .findByQuestionIdAndSessionIdAndUsername(parentQuestionId, session.getSessionId(), username)
+                .orElseThrow(() -> new BusinessException("I0405", "追问所属的主问题不存在或无权访问"));
+        if (!StringUtils.hasText(question.getFollowUpQuestion())) {
+            throw new BusinessException("I0408", "当前主问题没有待回答的追问");
+        }
+        if (StringUtils.hasText(question.getFollowUpAnswer())) {
+            throw new BusinessException("I0409", "该追问已经提交过回答");
+        }
+
+        AnswerScoreResult scoreResult = answerScoringService.score(
+                question.getFollowUpQuestion(),
+                question.getEvaluationPoints(),
+                request.answer()
+        );
+        String aiFeedback = aiChatService.chat(new AiChatRequest(
+                promptBuilder.buildAnswerReviewPrompt(
+                        question.getFollowUpQuestion(),
+                        request.answer(),
+                        question.getEvaluationPoints()
+                ),
+                null,
+                defaultModel(),
+                INTERVIEW_SYSTEM_PROMPT,
+                null
+        )).answer();
+        question.setFollowUpAnswer(request.answer().trim());
+        question.setFollowUpScore(scoreResult.score());
+        question.setFollowUpFeedback(InterviewFeedbackFormatter.formatFollowUpFeedback(
+                scoreResult.feedback(),
+                aiFeedback
+        ));
+        question.setFollowUpAnsweredAt(Instant.now());
+        questionRepository.save(question);
+
+        int averageScore = calculateAverageScore(username, session.getSessionId());
+        InterviewProgressDecision progressDecision = interviewProgressPolicy.decide(
+                session.isAdaptiveQuestionCount(),
+                session.getAnsweredCount(),
+                averageScore,
+                session.getQuestionCount(),
+                effectiveMaxQuestionCount(session),
+                false
+        );
+        session.setQuestionCount(progressDecision.targetQuestionCount());
+        session.setStatus(progressDecision.complete() ? InterviewSessionStatus.COMPLETED : InterviewSessionStatus.ANSWERING);
+        if (progressDecision.complete()) {
+            session.setTotalScore(averageScore);
+            session.setReportSummary(buildReportSummary(
+                    session.getTotalScore(),
+                    session.getAnsweredCount(),
+                    session.getQuestionCount()
+            ));
+            session.setCompletedAt(Instant.now());
+        }
+        session.setUpdatedAt(Instant.now());
+        sessionRepository.save(session);
+        updateRecord(session);
+        saveRuntime(session, "SUBMIT_FOLLOW_UP", "提交第 " + question.getQuestionOrder() + " 题追问，评分：" + scoreResult.score());
+        saveRuntime(session, "ADAPTIVE_PROGRESS", progressDecision.reason());
+
+        return new InterviewAnswerResponse(
+                session.getSessionId(),
+                request.questionId(),
+                scoreResult.score(),
+                question.getFollowUpFeedback(),
+                null,
+                question.getFollowUpRuleTrace(),
+                session.getStatus(),
+                session.getAnsweredCount(),
+                session.getQuestionCount()
+        );
+    }
+
     @Override
     public InterviewSessionResponse getSession(String username, String sessionId) {
         InterviewSessionDocument session = findSession(username, sessionId);
         runtimeService.recover(username, sessionId);
-        return toSessionResponse(session, listQuestionDocuments(username, sessionId));
+        return toSessionResponse(session, visibleQuestions(session, listQuestionDocuments(username, sessionId)));
     }
 
     @Override
     public InterviewReportResponse getReport(String username, String sessionId) {
         InterviewSessionDocument session = findSession(username, sessionId);
-        List<InterviewQuestionResponse> questions = listQuestionDocuments(username, sessionId)
+        List<InterviewQuestionResponse> questions = visibleQuestions(session, listQuestionDocuments(username, sessionId))
                 .stream()
                 .map(this::toQuestionResponse)
                 .toList();
@@ -451,9 +618,31 @@ public class DefaultInterviewService implements InterviewService {
         if (request == null || !StringUtils.hasText(request.resumeId())) {
             throw new BusinessException("I0407", "简历不能为空");
         }
-        if (!StringUtils.hasText(request.jobTitle())) {
-            throw new BusinessException("I0408", "岗位名称不能为空");
+    }
+
+    private List<EvidenceResponse> toJobIntelligenceEvidence(JobIntelligenceReport report) {
+        if (report == null || !report.successful() || report.sources() == null) {
+            return List.of();
         }
+        return report.sources().stream()
+                .map(this::toJobIntelligenceEvidence)
+                .toList();
+    }
+
+    private EvidenceResponse toJobIntelligenceEvidence(JobIntelligenceSource source) {
+        String evidenceId = "web-" + Integer.toUnsignedString(source.url().hashCode(), 16);
+        return new EvidenceResponse(
+                evidenceId,
+                "job-intelligence-search",
+                source.url(),
+                "JOB_MARKET_INTELLIGENCE",
+                source.title(),
+                source.content() + "\n来源：" + source.url(),
+                shorten(source.content(), 180),
+                "web-search,job-intelligence",
+                source.score(),
+                Math.min(1.0, source.score() + 0.08)
+        );
     }
 
     private void validateSubmitAnswerRequest(SubmitInterviewAnswerRequest request) {
@@ -491,7 +680,7 @@ public class DefaultInterviewService implements InterviewService {
 
     private int normalizeQuestionCount(Integer questionCount) {
         if (questionCount == null) {
-            return DEFAULT_QUESTION_COUNT;
+            return interviewProgressPolicy.initialQuestionCount();
         }
         return Math.max(1, Math.min(questionCount, MAX_QUESTION_COUNT));
     }
@@ -504,43 +693,6 @@ public class DefaultInterviewService implements InterviewService {
         return Math.max(1, Math.min(size, 100));
     }
 
-    private int scoreAnswer(String answer) {
-        String text = answer == null ? "" : answer;
-        int score = 60;
-        if (text.length() >= 80) {
-            score += 10;
-        }
-        if (containsAny(text, "Java", "Spring", "MySQL", "Redis", "MongoDB")) {
-            score += 10;
-        }
-        if (containsAny(text, "负责", "实现", "设计", "优化", "排查")) {
-            score += 10;
-        }
-        if (containsAny(text, "指标", "耗时", "QPS", "错误率", "数据", "提升", "降低")) {
-            score += 10;
-        }
-        return Math.min(score, 100);
-    }
-
-    private boolean containsAny(String text, String... keywords) {
-        for (String keyword : keywords) {
-            if (text.contains(keyword)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String buildFeedback(int score, String answer) {
-        if (score >= 90) {
-            return "回答较完整，能体现项目背景、技术方案和结果意识。";
-        }
-        if (score >= 75) {
-            return "回答基本可用，但建议补充更具体的技术细节和量化结果。";
-        }
-        return "回答偏泛，需要补充你的具体职责、技术选型理由、问题定位过程和最终效果。";
-    }
-
     private int existingFollowUpCount(InterviewQuestionSnapshotDocument question) {
         return StringUtils.hasText(question.getFollowUpQuestion()) ? 1 : 0;
     }
@@ -549,9 +701,38 @@ public class DefaultInterviewService implements InterviewService {
         List<InterviewQuestionSnapshotDocument> questions = listQuestionDocuments(username, sessionId);
         return (int) Math.round(questions.stream()
                 .filter(item -> item.getScore() != null)
-                .mapToInt(InterviewQuestionSnapshotDocument::getScore)
+                .mapToInt(item -> {
+                    if (item.getFollowUpScore() == null) {
+                        return item.getScore();
+                    }
+                    // 追问用于校正主问题判断，但不应完全覆盖主问题首次回答表现。
+                    return (int) Math.round(item.getScore() * 0.7 + item.getFollowUpScore() * 0.3);
+                })
                 .average()
                 .orElse(0));
+    }
+
+    private List<InterviewQuestionSnapshotDocument> visibleQuestions(
+            InterviewSessionDocument session,
+            List<InterviewQuestionSnapshotDocument> questions
+    ) {
+        return questions.stream()
+                .filter(question -> question.getQuestionOrder() <= session.getQuestionCount())
+                .toList();
+    }
+
+    private int effectiveMaxQuestionCount(InterviewSessionDocument session) {
+        return session.getMaxQuestionCount() > 0
+                ? session.getMaxQuestionCount()
+                : session.getQuestionCount();
+    }
+
+    private boolean isFollowUpQuestionId(String questionId) {
+        return StringUtils.hasText(questionId) && questionId.endsWith("-F1");
+    }
+
+    private String parentQuestionId(String followUpQuestionId) {
+        return followUpQuestionId.substring(0, followUpQuestionId.length() - 3);
     }
 
     private String buildReportSummary(Integer totalScore, int answeredCount, int questionCount) {
@@ -626,9 +807,13 @@ public class DefaultInterviewService implements InterviewService {
                 question.getScore(),
                 question.getFeedback(),
                 question.getFollowUpQuestion(),
+                question.getFollowUpAnswer(),
+                question.getFollowUpScore(),
+                question.getFollowUpFeedback(),
                 question.getFollowUpRuleTrace(),
                 question.getCreatedAt(),
-                question.getAnsweredAt()
+                question.getAnsweredAt(),
+                question.getFollowUpAnsweredAt()
         );
     }
 
@@ -670,11 +855,12 @@ public class DefaultInterviewService implements InterviewService {
 
     private InterviewConversationResponse toConversationResponse(InterviewRecord record) {
         String status = isCompleted(record.status()) ? "COMPLETED" : "IN_PROGRESS";
+        String interviewType = StringUtils.hasText(record.jobTitle()) ? record.jobTitle() : "简历综合面试";
         return new InterviewConversationResponse(
                 record.sessionId(),
-                record.jobTitle() + "模拟面试",
+                interviewType + "模拟面试",
                 status,
-                record.jobTitle(),
+                interviewType,
                 record.resumeId(),
                 record.createdAt(),
                 record.updatedAt()
@@ -706,6 +892,16 @@ public class DefaultInterviewService implements InterviewService {
 
     private String blankToDefault(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
+    }
+
+    private String normalizeOptional(String value) {
+        return StringUtils.hasText(value) ? value.trim() : "";
+    }
+
+    private boolean hasJobContext(String jobTitle, String companyName, String jobDescription) {
+        return StringUtils.hasText(jobTitle)
+                || StringUtils.hasText(companyName)
+                || StringUtils.hasText(jobDescription);
     }
 
     private String blankToNull(String value) {

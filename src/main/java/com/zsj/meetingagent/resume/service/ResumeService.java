@@ -1,6 +1,7 @@
 package com.zsj.meetingagent.resume.service;
 
 import com.zsj.meetingagent.resume.dto.ResumeTextRequest;
+import com.zsj.meetingagent.resume.vo.ResumePreviewResponse;
 import com.zsj.meetingagent.resume.vo.ResumeResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,4 +16,6 @@ public interface ResumeService {
     ResumeResponse uploadFile(String username, MultipartFile file);
 
     ResumeResponse getResume(String username, String resumeId);
+
+    ResumePreviewResponse getResumePreview(String username, String resumeId);
 }
