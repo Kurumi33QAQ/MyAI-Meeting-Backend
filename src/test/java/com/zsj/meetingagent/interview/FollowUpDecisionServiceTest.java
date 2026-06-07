@@ -90,13 +90,13 @@ class FollowUpDecisionServiceTest {
     }
 
     @Test
-    void aiSuggestionProducesTechnologySpecificFollowUp() {
+    void mediumScoreAiSuggestionProducesTechnologySpecificFollowUp() {
         FollowUpDecision decision = followUpDecisionService.decide(new FollowUpRuleContext(
                 "session-1",
                 "question-1",
                 "请介绍你负责的后端项目",
                 "我负责登录鉴权，使用 JWT 和 Spring Security，并通过 Redis 管理 token 黑名单。",
-                88,
+                82,
                 "技术栈较丰富，但需要补充技术选型理由和具体实现细节。",
                 "个人职责、技术实现、方案取舍",
                 "追问鉴权方案的完整链路",
@@ -112,6 +112,29 @@ class FollowUpDecisionServiceTest {
                 .contains("可验证结果")
                 .contains("响应时间")
                 .doesNotContain("你没有展开的技术细节");
+    }
+
+    @Test
+    void highScoreAnswerSkipsMinorAiSuggestionFollowUp() {
+        FollowUpDecision decision = followUpDecisionService.decide(new FollowUpRuleContext(
+                "session-1",
+                "question-1",
+                "请介绍你负责的后端项目",
+                "我负责登录鉴权，使用 JWT 和 Spring Security，并通过 Redis 黑名单处理退出登录，接口压测后平均响应时间稳定在 180ms。",
+                90,
+                "回答整体完整，如果继续优化，可以补充少量边界场景。",
+                "个人职责、技术实现、方案取舍",
+                "追问鉴权方案的完整链路",
+                List.of("evidence-1"),
+                InterviewSessionStatus.ANSWERING,
+                0,
+                1
+        ));
+
+        assertThat(decision.shouldFollowUp()).isFalse();
+        assertThat(decision.traceSummary())
+                .contains("高质量阈值")
+                .contains("最终裁决节点");
     }
 
     @Test

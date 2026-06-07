@@ -66,6 +66,9 @@ public class DefaultInterviewProgressPolicy implements InterviewProgressPolicy {
                     ? "前 " + initialQuestionCount + " 题暴露较多薄弱点，扩展到最多 " + maxQuestionCount + " 道继续考察。"
                     : "前 " + initialQuestionCount + " 题表现中等，继续完成标准 " + standardQuestionCount + " 道题。");
         }
+        if (answeredCount < currentQuestionCount) {
+            return new InterviewProgressDecision(false, currentQuestionCount, "继续完成当前计划的 " + currentQuestionCount + " 道主问题，再判断是否需要扩题或结束。");
+        }
         if (answeredCount >= standardQuestionCount && averageScore >= 65) {
             return new InterviewProgressDecision(true, currentQuestionCount, "已完成标准题量，能力判断已基本稳定。");
         }

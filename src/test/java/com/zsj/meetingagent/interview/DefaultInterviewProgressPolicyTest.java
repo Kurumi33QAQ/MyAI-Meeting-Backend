@@ -36,6 +36,32 @@ class DefaultInterviewProgressPolicyTest {
     }
 
     @Test
+    void continuesCurrentStandardPlanBeforeExpandingAgain() {
+        var decision = policy.decide(true, 9, 58, 12, 15, false);
+
+        assertThat(decision.complete()).isFalse();
+        assertThat(decision.targetQuestionCount()).isEqualTo(12);
+        assertThat(decision.reason()).contains("当前计划");
+    }
+
+    @Test
+    void expandsToFifteenOnlyAfterStandardPlanStillUnstable() {
+        var decision = policy.decide(true, 12, 58, 12, 15, false);
+
+        assertThat(decision.complete()).isFalse();
+        assertThat(decision.targetQuestionCount()).isEqualTo(15);
+    }
+
+    @Test
+    void doesNotCompleteFifteenQuestionPlanAtTwelveAnswers() {
+        var decision = policy.decide(true, 12, 80, 15, 15, false);
+
+        assertThat(decision.complete()).isFalse();
+        assertThat(decision.targetQuestionCount()).isEqualTo(15);
+        assertThat(decision.reason()).contains("当前计划");
+    }
+
+    @Test
     void pendingFollowUpMustBeAnsweredBeforeCompletion() {
         var decision = policy.decide(true, 12, 90, 12, 15, true);
 

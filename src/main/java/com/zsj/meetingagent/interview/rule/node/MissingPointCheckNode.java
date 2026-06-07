@@ -13,9 +13,19 @@ import org.springframework.util.StringUtils;
 @LiteflowComponent("missingPointCheckNode")
 public class MissingPointCheckNode extends NodeComponent {
 
+    private static final int HIGH_QUALITY_SCORE_THRESHOLD = 85;
+
     @Override
     public void process() {
         FollowUpRuleContext context = getContextBean(FollowUpRuleContext.class);
+        if (context.score() >= HIGH_QUALITY_SCORE_THRESHOLD) {
+            context.addTrace(
+                    "缺失考点判断节点",
+                    false,
+                    "回答得分已达到高质量阈值，不再因为单个缺失项继续追问。"
+            );
+            return;
+        }
         String answer = context.answer() == null ? "" : context.answer();
         if (!StringUtils.hasText(answer) || answer.length() < 30) {
             context.propose("缺失考点判断节点", "请不要只回答结论，补充一个完整例子：背景是什么、你做了什么、用了什么技术、结果如何？", "回答长度过短，缺少可评估信息。", false);
