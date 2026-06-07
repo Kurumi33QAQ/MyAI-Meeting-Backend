@@ -139,6 +139,7 @@ public class LegacyInterviewController {
         payload.put("followUpQuestion", response.followUpQuestion());
         payload.put("nextQuestionNumber", response.nextQuestionNumber());
         payload.put("isFollowUp", response.isFollowUp());
+        payload.put("parentQuestionNumber", parentQuestionNumber(response.questionId()));
         payload.put("followUpCount", response.followUpCount());
         payload.put("followUpRuleTrace", response.followUpRuleTrace());
         payload.put("status", response.status());
@@ -451,6 +452,7 @@ public class LegacyInterviewController {
         payload.put("nextQuestionNumber", pendingFollowUp.questionId());
         payload.put("nextQuestion", pendingFollowUp.question());
         payload.put("isFollowUp", true);
+        payload.put("parentQuestionNumber", parentQuestionNumber(pendingFollowUp.questionId()));
         payload.put("followUpCount", pendingFollowUp.round());
         return payload;
     }
@@ -511,6 +513,7 @@ public class LegacyInterviewController {
         payload.put("score", question.score());
         payload.put("feedback", question.feedback());
         payload.put("isFollowUp", false);
+        payload.put("parentQuestionNumber", null);
         payload.put("followUpNeeded", question.followUpQuestion() != null);
         payload.put("followUpRuleTrace", question.followUpRuleTrace());
         payload.put("followUpQuestion", question.followUpQuestion());
@@ -528,12 +531,21 @@ public class LegacyInterviewController {
             followUpPayload.put("score", followUp.score());
             followUpPayload.put("feedback", followUp.feedback());
             followUpPayload.put("isFollowUp", true);
+            followUpPayload.put("parentQuestionNumber", question.questionId());
             followUpPayload.put("followUpNeeded", followUp.answer() == null || followUp.answer().isBlank());
             followUpPayload.put("followUpRuleTrace", followUp.ruleTrace());
             followUpPayload.put("followUpCount", followUp.round());
             items.add(followUpPayload);
         });
         return items;
+    }
+
+    private String parentQuestionNumber(String questionNumber) {
+        if (!StringUtils.hasText(questionNumber)) {
+            return null;
+        }
+        int followUpIndex = questionNumber.lastIndexOf("-F");
+        return followUpIndex > 0 ? questionNumber.substring(0, followUpIndex) : null;
     }
 
     private Map<String, Object> toLegacyRadar(InterviewReportResponse report) {

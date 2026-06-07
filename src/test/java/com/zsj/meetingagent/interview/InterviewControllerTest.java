@@ -7,6 +7,7 @@ import com.zsj.meetingagent.common.vo.PageResponse;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
+import com.zsj.meetingagent.interview.vo.InterviewFollowUpResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
@@ -90,7 +91,17 @@ class InterviewControllerTest {
                 null,
                 null,
                 null,
-                List.of(),
+                List.of(new InterviewFollowUpResponse(
+                        1,
+                        "question-1-F1",
+                        "请补充你在这个模块里亲自负责的接口和验证结果。",
+                        "我负责订单创建接口，并用接口测试验证成功。",
+                        70,
+                        "追问回答基本有效，但仍需补充量化结果。",
+                        "低分判断节点[命中]",
+                        now,
+                        now
+                )),
                 now,
                 null,
                 null
@@ -218,6 +229,12 @@ class InterviewControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalScore").value(90));
+
+        mockMvc.perform(get("/api/xunzhi/v1/interview/interview/record/session-1")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.qaReviews[1].isFollowUp").value(true))
+                .andExpect(jsonPath("$.data.qaReviews[1].parentQuestionNumber").value("question-1"));
 
         mockMvc.perform(get("/api/interview-sessions/session-1/agent-traces")
                         .header("Authorization", "Bearer " + token))
