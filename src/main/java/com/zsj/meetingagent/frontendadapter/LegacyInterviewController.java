@@ -8,6 +8,7 @@ import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
+import com.zsj.meetingagent.interview.vo.InterviewFollowUpResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -135,6 +137,9 @@ public class LegacyInterviewController {
         payload.put("totalScore", session.totalScore());
         payload.put("feedback", response.feedback());
         payload.put("followUpQuestion", response.followUpQuestion());
+        payload.put("nextQuestionNumber", response.nextQuestionNumber());
+        payload.put("isFollowUp", response.isFollowUp());
+        payload.put("followUpCount", response.followUpCount());
         payload.put("followUpRuleTrace", response.followUpRuleTrace());
         payload.put("status", response.status());
         payload.put("answeredCount", response.answeredCount());
@@ -142,11 +147,11 @@ public class LegacyInterviewController {
         payload.put("isSuccess", true);
         payload.put("finished", session.status().name().equals("COMPLETED"));
         if (StringUtils.hasText(response.followUpQuestion())) {
-            payload.put("nextQuestionNumber", followUpQuestionId(response.questionId()));
+            payload.put("nextQuestionNumber", response.nextQuestionNumber());
             payload.put("nextQuestion", response.followUpQuestion());
             payload.put("questionContent", response.followUpQuestion());
             payload.put("isFollowUp", true);
-            payload.put("followUpCount", 1);
+            payload.put("followUpCount", response.followUpCount());
         } else {
             InterviewQuestionResponse nextQuestion = nextUnansweredQuestion(session.questions());
             if (nextQuestion != null) {
@@ -366,6 +371,22 @@ public class LegacyInterviewController {
         payload.put("followUpAnswer", question.followUpAnswer());
         payload.put("followUpScore", question.followUpScore());
         payload.put("followUpFeedback", question.followUpFeedback());
+        payload.put("followUps", question.followUps().stream().map(this::toLegacyFollowUpRound).toList());
+        return payload;
+    }
+
+    private Map<String, Object> toLegacyFollowUpRound(InterviewFollowUpResponse followUp) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("round", followUp.round());
+        payload.put("questionNumber", followUp.questionId());
+        payload.put("questionId", followUp.questionId());
+        payload.put("question", followUp.question());
+        payload.put("answer", followUp.answer());
+        payload.put("score", followUp.score());
+        payload.put("feedback", followUp.feedback());
+        payload.put("followUpRuleTrace", followUp.ruleTrace());
+        payload.put("createdAt", followUp.createdAt());
+        payload.put("answeredAt", followUp.answeredAt());
         return payload;
     }
 
@@ -417,20 +438,20 @@ public class LegacyInterviewController {
             InterviewSessionResponse session,
             InterviewQuestionResponse question
     ) {
+        InterviewFollowUpResponse pendingFollowUp = pendingFollowUpRound(question);
         Map<String, Object> payload = new LinkedHashMap<>();
-        String followUpId = followUpQuestionId(question.questionId());
         payload.put("sessionId", session.sessionId());
         payload.put("isSuccess", true);
         payload.put("finished", false);
         payload.put("totalScore", session.totalScore());
         payload.put("answeredCount", session.answeredCount());
         payload.put("questionCount", session.questionCount());
-        payload.put("questionNumber", followUpId);
-        payload.put("questionContent", question.followUpQuestion());
-        payload.put("nextQuestionNumber", followUpId);
-        payload.put("nextQuestion", question.followUpQuestion());
+        payload.put("questionNumber", pendingFollowUp.questionId());
+        payload.put("questionContent", pendingFollowUp.question());
+        payload.put("nextQuestionNumber", pendingFollowUp.questionId());
+        payload.put("nextQuestion", pendingFollowUp.question());
         payload.put("isFollowUp", true);
-        payload.put("followUpCount", 1);
+        payload.put("followUpCount", pendingFollowUp.round());
         return payload;
     }
 
@@ -454,7 +475,7 @@ public class LegacyInterviewController {
     private Map<String, Object> toLegacyReport(InterviewReportResponse report) {
         Map<String, Object> payload = new LinkedHashMap<>();
         List<Map<String, Object>> qaReviews = report.questions().stream()
-                .map(this::toLegacyQaReview)
+                .flatMap(question -> toLegacyQaReviewItems(question).stream())
                 .toList();
         payload.put("sessionId", report.sessionId());
         payload.put("id", report.sessionId());
@@ -480,7 +501,8 @@ public class LegacyInterviewController {
         return payload;
     }
 
-    private Map<String, Object> toLegacyQaReview(InterviewQuestionResponse question) {
+    private List<Map<String, Object>> toLegacyQaReviewItems(InterviewQuestionResponse question) {
+        List<Map<String, Object>> items = new ArrayList<>();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("seq", question.questionOrder());
         payload.put("questionNumber", question.questionId());
@@ -495,8 +517,23 @@ public class LegacyInterviewController {
         payload.put("followUpAnswer", question.followUpAnswer());
         payload.put("followUpScore", question.followUpScore());
         payload.put("followUpFeedback", question.followUpFeedback());
-        payload.put("followUpCount", question.followUpQuestion() == null ? 0 : 1);
-        return payload;
+        payload.put("followUpCount", question.followUps().isEmpty() ? 0 : question.followUps().size());
+        items.add(payload);
+        question.followUps().forEach(followUp -> {
+            Map<String, Object> followUpPayload = new LinkedHashMap<>();
+            followUpPayload.put("seq", question.questionOrder());
+            followUpPayload.put("questionNumber", followUp.questionId());
+            followUpPayload.put("question", followUp.question());
+            followUpPayload.put("answer", followUp.answer());
+            followUpPayload.put("score", followUp.score());
+            followUpPayload.put("feedback", followUp.feedback());
+            followUpPayload.put("isFollowUp", true);
+            followUpPayload.put("followUpNeeded", followUp.answer() == null || followUp.answer().isBlank());
+            followUpPayload.put("followUpRuleTrace", followUp.ruleTrace());
+            followUpPayload.put("followUpCount", followUp.round());
+            items.add(followUpPayload);
+        });
+        return items;
     }
 
     private Map<String, Object> toLegacyRadar(InterviewReportResponse report) {
@@ -529,14 +566,17 @@ public class LegacyInterviewController {
 
     private InterviewQuestionResponse pendingFollowUpQuestion(List<InterviewQuestionResponse> questions) {
         return questions.stream()
-                .filter(question -> StringUtils.hasText(question.followUpQuestion()))
-                .filter(question -> !StringUtils.hasText(question.followUpAnswer()))
+                .filter(question -> pendingFollowUpRound(question) != null)
                 .findFirst()
                 .orElse(null);
     }
 
-    private String followUpQuestionId(String parentQuestionId) {
-        return parentQuestionId + "-F1";
+    private InterviewFollowUpResponse pendingFollowUpRound(InterviewQuestionResponse question) {
+        return question.followUps().stream()
+                .filter(followUp -> StringUtils.hasText(followUp.question()))
+                .filter(followUp -> !StringUtils.hasText(followUp.answer()))
+                .findFirst()
+                .orElse(null);
     }
 
     private String firstStringValue(Map<String, Object> request, String... keys) {

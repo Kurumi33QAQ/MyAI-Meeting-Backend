@@ -54,6 +54,12 @@ public class InterviewQuestionSnapshotDocument {
     private String followUpQuestion;
 
     /**
+     * 多轮追问列表。
+     * 新版本统一通过这里保存 F1/F2/F3；下方单字段保留给旧数据和旧前端兼容。
+     */
+    private List<InterviewFollowUpRound> followUps;
+
+    /**
      * 追问作为独立可回答回合保存，但仍归属于当前主问题，不重复计入主问题完成数量。
      */
     private String followUpAnswer;
@@ -192,6 +198,14 @@ public class InterviewQuestionSnapshotDocument {
 
     public void setFollowUpQuestion(String followUpQuestion) {
         this.followUpQuestion = followUpQuestion;
+    }
+
+    public List<InterviewFollowUpRound> getFollowUps() {
+        return followUps;
+    }
+
+    public void setFollowUps(List<InterviewFollowUpRound> followUps) {
+        this.followUps = followUps;
     }
 
     public String getFollowUpAnswer() {

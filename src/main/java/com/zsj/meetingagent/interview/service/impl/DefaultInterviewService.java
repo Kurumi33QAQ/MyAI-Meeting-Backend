@@ -13,6 +13,8 @@ import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
 import com.zsj.meetingagent.interview.adaptive.InterviewProgressDecision;
 import com.zsj.meetingagent.interview.adaptive.InterviewProgressPolicy;
+import com.zsj.meetingagent.interview.config.InterviewProperties;
+import com.zsj.meetingagent.interview.entity.InterviewFollowUpRound;
 import com.zsj.meetingagent.interview.entity.InterviewQuestionSnapshotDocument;
 import com.zsj.meetingagent.interview.entity.InterviewRecord;
 import com.zsj.meetingagent.interview.entity.InterviewSessionDocument;
@@ -34,6 +36,7 @@ import com.zsj.meetingagent.interview.service.InterviewService;
 import com.zsj.meetingagent.interview.support.InterviewFeedbackFormatter;
 import com.zsj.meetingagent.interview.vo.InterviewAnswerResponse;
 import com.zsj.meetingagent.interview.vo.InterviewConversationResponse;
+import com.zsj.meetingagent.interview.vo.InterviewFollowUpResponse;
 import com.zsj.meetingagent.interview.vo.InterviewQuestionResponse;
 import com.zsj.meetingagent.interview.vo.InterviewReportResponse;
 import com.zsj.meetingagent.interview.vo.InterviewRecordResponse;
@@ -63,7 +66,6 @@ import java.util.UUID;
 @Service
 public class DefaultInterviewService implements InterviewService {
 
-    private static final int MAX_QUESTION_COUNT = 15;
     private static final int NOT_DELETED = 0;
     private static final String INTERVIEW_SYSTEM_PROMPT = """
             你是一个中文友好的技术模拟面试官。
@@ -87,6 +89,7 @@ public class DefaultInterviewService implements InterviewService {
     private final AnswerScoringService answerScoringService;
     private final InterviewProgressPolicy interviewProgressPolicy;
     private final FollowUpQuestionGenerator followUpQuestionGenerator;
+    private final InterviewProperties interviewProperties;
 
     public DefaultInterviewService(
             ResumeService resumeService,
@@ -104,7 +107,8 @@ public class DefaultInterviewService implements InterviewService {
             JobIntelligenceSearchService jobIntelligenceSearchService,
             AnswerScoringService answerScoringService,
             InterviewProgressPolicy interviewProgressPolicy,
-            FollowUpQuestionGenerator followUpQuestionGenerator
+            FollowUpQuestionGenerator followUpQuestionGenerator,
+            InterviewProperties interviewProperties
     ) {
         this.resumeService = resumeService;
         this.aiChatService = aiChatService;
@@ -122,6 +126,7 @@ public class DefaultInterviewService implements InterviewService {
         this.answerScoringService = answerScoringService;
         this.interviewProgressPolicy = interviewProgressPolicy;
         this.followUpQuestionGenerator = followUpQuestionGenerator;
+        this.interviewProperties = interviewProperties;
     }
 
     @Override
@@ -330,7 +335,7 @@ public class DefaultInterviewService implements InterviewService {
                 question.getEvidenceIds(),
                 session.getStatus(),
                 existingFollowUpCount(question),
-                1
+                interviewProperties.getMaxFollowUpCount()
         ));
         ResumeResponse resumeContext = resumeService.getResume(username, session.getResumeId());
         String followUpQuestion = followUpDecision.shouldFollowUp()
@@ -348,6 +353,11 @@ public class DefaultInterviewService implements InterviewService {
                         followUpDecision.followUpQuestion()
                 ))
                 : null;
+        InterviewFollowUpRound createdFollowUp = null;
+        if (StringUtils.hasText(followUpQuestion)) {
+            createdFollowUp = appendFollowUpRound(question, followUpQuestion, followUpDecision.traceSummary());
+        }
+        syncLegacyFollowUpFields(question);
 
         question.setUserAnswer(request.answer().trim());
         question.setScore(score);
@@ -356,7 +366,6 @@ public class DefaultInterviewService implements InterviewService {
                 aiFeedback,
                 reviewOutput.summary()
         ));
-        question.setFollowUpQuestion(followUpQuestion);
         question.setFollowUpRuleTrace(followUpDecision.traceSummary());
         question.setAnsweredAt(Instant.now());
         questionRepository.save(question);
@@ -394,6 +403,9 @@ public class DefaultInterviewService implements InterviewService {
                 score,
                 question.getFeedback(),
                 question.getFollowUpQuestion(),
+                createdFollowUp == null ? null : followUpQuestionId(question.getQuestionId(), createdFollowUp.getRound()),
+                createdFollowUp != null,
+                createdFollowUp == null ? 0 : createdFollowUp.getRound(),
                 question.getFollowUpRuleTrace(),
                 session.getStatus(),
                 session.getAnsweredCount(),
@@ -410,21 +422,24 @@ public class DefaultInterviewService implements InterviewService {
         InterviewQuestionSnapshotDocument question = questionRepository
                 .findByQuestionIdAndSessionIdAndUsername(parentQuestionId, session.getSessionId(), username)
                 .orElseThrow(() -> new BusinessException("I0405", "追问所属的主问题不存在或无权访问"));
-        if (!StringUtils.hasText(question.getFollowUpQuestion())) {
+        ensureFollowUpRounds(question);
+        int roundNumber = followUpRoundNumber(request.questionId());
+        InterviewFollowUpRound currentFollowUp = findFollowUpRound(question, roundNumber);
+        if (currentFollowUp == null || !StringUtils.hasText(currentFollowUp.getQuestion())) {
             throw new BusinessException("I0408", "当前主问题没有待回答的追问");
         }
-        if (StringUtils.hasText(question.getFollowUpAnswer())) {
+        if (StringUtils.hasText(currentFollowUp.getAnswer())) {
             throw new BusinessException("I0409", "该追问已经提交过回答");
         }
 
         AnswerScoreResult scoreResult = answerScoringService.score(
-                question.getFollowUpQuestion(),
+                currentFollowUp.getQuestion(),
                 question.getEvaluationPoints(),
                 request.answer()
         );
         String aiFeedback = aiChatService.chat(new AiChatRequest(
                 promptBuilder.buildAnswerReviewPrompt(
-                        question.getFollowUpQuestion(),
+                        currentFollowUp.getQuestion(),
                         request.answer(),
                         question.getEvaluationPoints()
                 ),
@@ -433,13 +448,50 @@ public class DefaultInterviewService implements InterviewService {
                 INTERVIEW_SYSTEM_PROMPT,
                 null
         )).answer();
-        question.setFollowUpAnswer(request.answer().trim());
-        question.setFollowUpScore(scoreResult.score());
-        question.setFollowUpFeedback(InterviewFeedbackFormatter.formatFollowUpFeedback(
+        currentFollowUp.setAnswer(request.answer().trim());
+        currentFollowUp.setScore(scoreResult.score());
+        currentFollowUp.setFeedback(InterviewFeedbackFormatter.formatFollowUpFeedback(
                 scoreResult.feedback(),
                 aiFeedback
         ));
-        question.setFollowUpAnsweredAt(Instant.now());
+        currentFollowUp.setAnsweredAt(Instant.now());
+
+        FollowUpDecision nextDecision = followUpDecisionService.decide(new FollowUpRuleContext(
+                session.getSessionId(),
+                question.getQuestionId(),
+                currentFollowUp.getQuestion(),
+                request.answer(),
+                scoreResult.score(),
+                aiFeedback,
+                question.getEvaluationPoints(),
+                question.getFollowUpDirection(),
+                question.getEvidenceIds(),
+                session.getStatus(),
+                existingFollowUpCount(question),
+                interviewProperties.getMaxFollowUpCount()
+        ));
+        ResumeResponse resumeContext = resumeService.getResume(username, session.getResumeId());
+        String nextFollowUpQuestion = nextDecision.shouldFollowUp()
+                ? followUpQuestionGenerator.generate(new FollowUpQuestionRequest(
+                        session.getSessionId(),
+                        resumeContext.summary(),
+                        session.getJobTitle(),
+                        session.getCompanyName(),
+                        session.getJobDescription(),
+                        currentFollowUp.getQuestion(),
+                        request.answer(),
+                        question.getEvaluationPoints(),
+                        question.getFollowUpDirection(),
+                        aiFeedback,
+                        nextDecision.followUpQuestion(),
+                        buildFollowUpHistory(question)
+                ))
+                : null;
+        InterviewFollowUpRound nextFollowUp = null;
+        if (StringUtils.hasText(nextFollowUpQuestion)) {
+            nextFollowUp = appendFollowUpRound(question, nextFollowUpQuestion, nextDecision.traceSummary());
+        }
+        syncLegacyFollowUpFields(question);
         questionRepository.save(question);
 
         int averageScore = calculateAverageScore(username, session.getSessionId());
@@ -449,7 +501,7 @@ public class DefaultInterviewService implements InterviewService {
                 averageScore,
                 session.getQuestionCount(),
                 effectiveMaxQuestionCount(session),
-                false
+                nextFollowUp != null
         );
         session.setQuestionCount(progressDecision.targetQuestionCount());
         session.setStatus(progressDecision.complete() ? InterviewSessionStatus.COMPLETED : InterviewSessionStatus.ANSWERING);
@@ -465,16 +517,20 @@ public class DefaultInterviewService implements InterviewService {
         session.setUpdatedAt(Instant.now());
         sessionRepository.save(session);
         updateRecord(session);
-        saveRuntime(session, "SUBMIT_FOLLOW_UP", "提交第 " + question.getQuestionOrder() + " 题追问，评分：" + scoreResult.score());
+        saveRuntime(session, "SUBMIT_FOLLOW_UP", "提交第 " + question.getQuestionOrder() + " 题第 " + roundNumber + " 轮追问，评分：" + scoreResult.score());
+        saveRuntime(session, "FOLLOW_UP_RULE_TRACE", nextDecision.traceSummary());
         saveRuntime(session, "ADAPTIVE_PROGRESS", progressDecision.reason());
 
         return new InterviewAnswerResponse(
                 session.getSessionId(),
                 request.questionId(),
                 scoreResult.score(),
-                question.getFollowUpFeedback(),
-                null,
-                question.getFollowUpRuleTrace(),
+                currentFollowUp.getFeedback(),
+                nextFollowUp == null ? null : nextFollowUp.getQuestion(),
+                nextFollowUp == null ? null : followUpQuestionId(question.getQuestionId(), nextFollowUp.getRound()),
+                nextFollowUp != null,
+                nextFollowUp == null ? 0 : nextFollowUp.getRound(),
+                nextDecision.traceSummary(),
                 session.getStatus(),
                 session.getAnsweredCount(),
                 session.getQuestionCount()
@@ -682,7 +738,7 @@ public class DefaultInterviewService implements InterviewService {
         if (questionCount == null) {
             return interviewProgressPolicy.initialQuestionCount();
         }
-        return Math.max(1, Math.min(questionCount, MAX_QUESTION_COUNT));
+        return Math.max(1, Math.min(questionCount, interviewProgressPolicy.questionPoolSize()));
     }
 
     private int normalizePageCurrent(int current) {
@@ -694,7 +750,85 @@ public class DefaultInterviewService implements InterviewService {
     }
 
     private int existingFollowUpCount(InterviewQuestionSnapshotDocument question) {
-        return StringUtils.hasText(question.getFollowUpQuestion()) ? 1 : 0;
+        return followUpRounds(question).size();
+    }
+
+    private InterviewFollowUpRound appendFollowUpRound(
+            InterviewQuestionSnapshotDocument question,
+            String followUpQuestion,
+            String ruleTrace
+    ) {
+        List<InterviewFollowUpRound> rounds = ensureFollowUpRounds(question);
+        InterviewFollowUpRound round = new InterviewFollowUpRound();
+        round.setRound(rounds.size() + 1);
+        round.setQuestion(followUpQuestion.trim());
+        round.setRuleTrace(ruleTrace);
+        round.setCreatedAt(Instant.now());
+        rounds.add(round);
+        question.setFollowUps(rounds);
+        return round;
+    }
+
+    private List<InterviewFollowUpRound> followUpRounds(InterviewQuestionSnapshotDocument question) {
+        if (question.getFollowUps() != null && !question.getFollowUps().isEmpty()) {
+            return question.getFollowUps().stream()
+                    .filter(round -> StringUtils.hasText(round.getQuestion()))
+                    .toList();
+        }
+        if (!StringUtils.hasText(question.getFollowUpQuestion())) {
+            return List.of();
+        }
+        /*
+         * 兼容阶段 10.2 之前已经落库的单字段追问数据。
+         * MongoDB 老文档没有 followUps 列表时，运行时临时折叠成 F1，避免历史会话无法恢复。
+         */
+        InterviewFollowUpRound legacyRound = new InterviewFollowUpRound();
+        legacyRound.setRound(1);
+        legacyRound.setQuestion(question.getFollowUpQuestion());
+        legacyRound.setAnswer(question.getFollowUpAnswer());
+        legacyRound.setScore(question.getFollowUpScore());
+        legacyRound.setFeedback(question.getFollowUpFeedback());
+        legacyRound.setRuleTrace(question.getFollowUpRuleTrace());
+        legacyRound.setAnsweredAt(question.getFollowUpAnsweredAt());
+        return List.of(legacyRound);
+    }
+
+    private List<InterviewFollowUpRound> ensureFollowUpRounds(InterviewQuestionSnapshotDocument question) {
+        List<InterviewFollowUpRound> rounds = new ArrayList<>(followUpRounds(question));
+        question.setFollowUps(rounds);
+        return rounds;
+    }
+
+    private InterviewFollowUpRound findFollowUpRound(InterviewQuestionSnapshotDocument question, int roundNumber) {
+        return followUpRounds(question).stream()
+                .filter(round -> round.getRound() == roundNumber)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void syncLegacyFollowUpFields(InterviewQuestionSnapshotDocument question) {
+        List<InterviewFollowUpRound> rounds = followUpRounds(question);
+        if (rounds.isEmpty()) {
+            question.setFollowUpQuestion(null);
+            question.setFollowUpAnswer(null);
+            question.setFollowUpScore(null);
+            question.setFollowUpFeedback(null);
+            question.setFollowUpAnsweredAt(null);
+            return;
+        }
+        InterviewFollowUpRound firstRound = rounds.get(0);
+        question.setFollowUpQuestion(firstRound.getQuestion());
+        question.setFollowUpAnswer(firstRound.getAnswer());
+        question.setFollowUpScore(firstRound.getScore());
+        question.setFollowUpFeedback(firstRound.getFeedback());
+        question.setFollowUpAnsweredAt(firstRound.getAnsweredAt());
+    }
+
+    private List<String> buildFollowUpHistory(InterviewQuestionSnapshotDocument question) {
+        return followUpRounds(question).stream()
+                .map(round -> "F" + round.getRound() + " 问：" + round.getQuestion()
+                        + "；答：" + (StringUtils.hasText(round.getAnswer()) ? round.getAnswer() : "未回答"))
+                .toList();
     }
 
     private int calculateAverageScore(String username, String sessionId) {
@@ -702,11 +836,18 @@ public class DefaultInterviewService implements InterviewService {
         return (int) Math.round(questions.stream()
                 .filter(item -> item.getScore() != null)
                 .mapToInt(item -> {
-                    if (item.getFollowUpScore() == null) {
+                    List<InterviewFollowUpRound> answeredFollowUps = followUpRounds(item).stream()
+                            .filter(round -> round.getScore() != null)
+                            .toList();
+                    if (answeredFollowUps.isEmpty()) {
                         return item.getScore();
                     }
-                    // 追问用于校正主问题判断，但不应完全覆盖主问题首次回答表现。
-                    return (int) Math.round(item.getScore() * 0.7 + item.getFollowUpScore() * 0.3);
+                    double followUpAverage = answeredFollowUps.stream()
+                            .mapToInt(InterviewFollowUpRound::getScore)
+                            .average()
+                            .orElse(item.getScore());
+                    // 多轮追问用于校正主问题判断，但不应完全覆盖首次回答表现。
+                    return (int) Math.round(item.getScore() * 0.65 + followUpAverage * 0.35);
                 })
                 .average()
                 .orElse(0));
@@ -728,11 +869,31 @@ public class DefaultInterviewService implements InterviewService {
     }
 
     private boolean isFollowUpQuestionId(String questionId) {
-        return StringUtils.hasText(questionId) && questionId.endsWith("-F1");
+        return StringUtils.hasText(questionId) && questionId.matches(".+-F\\d+");
     }
 
     private String parentQuestionId(String followUpQuestionId) {
-        return followUpQuestionId.substring(0, followUpQuestionId.length() - 3);
+        int markerIndex = followUpQuestionId.lastIndexOf("-F");
+        if (markerIndex <= 0) {
+            throw new BusinessException("I0411", "追问题号格式不正确");
+        }
+        return followUpQuestionId.substring(0, markerIndex);
+    }
+
+    private int followUpRoundNumber(String followUpQuestionId) {
+        int markerIndex = followUpQuestionId.lastIndexOf("-F");
+        if (markerIndex <= 0 || markerIndex + 2 >= followUpQuestionId.length()) {
+            throw new BusinessException("I0411", "追问题号格式不正确");
+        }
+        try {
+            return Integer.parseInt(followUpQuestionId.substring(markerIndex + 2));
+        } catch (NumberFormatException ex) {
+            throw new BusinessException("I0411", "追问题号格式不正确");
+        }
+    }
+
+    private String followUpQuestionId(String parentQuestionId, int round) {
+        return parentQuestionId + "-F" + round;
     }
 
     private String buildReportSummary(Integer totalScore, int answeredCount, int questionCount) {
@@ -811,9 +972,26 @@ public class DefaultInterviewService implements InterviewService {
                 question.getFollowUpScore(),
                 question.getFollowUpFeedback(),
                 question.getFollowUpRuleTrace(),
+                followUpRounds(question).stream()
+                        .map(round -> toFollowUpResponse(question.getQuestionId(), round))
+                        .toList(),
                 question.getCreatedAt(),
                 question.getAnsweredAt(),
                 question.getFollowUpAnsweredAt()
+        );
+    }
+
+    private InterviewFollowUpResponse toFollowUpResponse(String parentQuestionId, InterviewFollowUpRound round) {
+        return new InterviewFollowUpResponse(
+                round.getRound(),
+                followUpQuestionId(parentQuestionId, round.getRound()),
+                round.getQuestion(),
+                round.getAnswer(),
+                round.getScore(),
+                round.getFeedback(),
+                round.getRuleTrace(),
+                round.getCreatedAt(),
+                round.getAnsweredAt()
         );
     }
 

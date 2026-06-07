@@ -23,15 +23,15 @@ class FollowUpDecisionServiceTest {
     private FollowUpDecisionService followUpDecisionService;
 
     @Test
-    void lowScoreAnswerTriggersFollowUp() {
+    void lowScoreAnswerTriggersSpecificFollowUp() {
         FollowUpDecision decision = followUpDecisionService.decide(new FollowUpRuleContext(
                 "session-1",
                 "question-1",
-                "请介绍你的 Java 后端项目",
+                "请介绍你简历里的 Java 后端项目",
                 "不知道",
                 60,
                 "回答缺少项目细节，需要补充。",
-                "项目理解、技术细节、表达结构",
+                "项目理解、技术细节、表达结果",
                 "追问技术细节",
                 List.of("evidence-1"),
                 InterviewSessionStatus.ANSWERING,
@@ -40,7 +40,10 @@ class FollowUpDecisionServiceTest {
         ));
 
         assertThat(decision.shouldFollowUp()).isTrue();
-        assertThat(decision.followUpQuestion()).contains("最熟悉的一个项目模块");
+        assertThat(decision.followUpQuestion())
+                .contains("具体项目模块")
+                .contains("亲自负责")
+                .doesNotContain("请详细说说");
         assertThat(decision.traceSummary()).contains("低分判断节点");
     }
 
@@ -53,7 +56,7 @@ class FollowUpDecisionServiceTest {
                 "我负责设计 Spring Boot 订单接口，使用 MySQL 索引优化和 Redis 缓存降低查询耗时，通过压测指标把接口耗时从 600ms 降低到 180ms。",
                 95,
                 "回答较完整，命中了主要考察点。",
-                "项目理解、技术细节、表达结构",
+                "项目理解、技术细节、表达结果",
                 "追问技术细节",
                 List.of("evidence-1"),
                 InterviewSessionStatus.ANSWERING,
@@ -74,7 +77,7 @@ class FollowUpDecisionServiceTest {
                 "不知道",
                 60,
                 "回答缺少项目细节，需要补充。",
-                "项目理解、技术细节、表达结构",
+                "项目理解、技术细节、表达结果",
                 "追问技术细节",
                 List.of("evidence-1"),
                 InterviewSessionStatus.ANSWERING,
@@ -106,7 +109,8 @@ class FollowUpDecisionServiceTest {
         assertThat(decision.shouldFollowUp()).isTrue();
         assertThat(decision.followUpQuestion())
                 .contains("Redis")
-                .contains("可验证变化")
+                .contains("可验证结果")
+                .contains("响应时间")
                 .doesNotContain("你没有展开的技术细节");
     }
 
@@ -130,7 +134,7 @@ class FollowUpDecisionServiceTest {
         assertThat(decision.shouldFollowUp()).isTrue();
         assertThat(decision.followUpQuestion())
                 .contains("数据库方案")
-                .contains("可验证变化");
+                .contains("可验证结果");
     }
 
     @Test
@@ -155,7 +159,7 @@ class FollowUpDecisionServiceTest {
                 .contains("String")
                 .contains("Set")
                 .contains("key")
-                .contains("Hash")
+                .contains("其他结构")
                 .doesNotContain("问题现象、排查过程");
     }
 }

@@ -168,6 +168,9 @@ public class InterviewPromptBuilder {
                 后端规则给出的兜底追问：
                 %s
 
+                前序追问链：
+                %s
+
                 输出要求：
                 1. 只输出一条中文问句，以问号结尾，不输出标题、评分、答案、JSON 或 Markdown。
                 2. 直接向候选人提问。禁止出现“如果某公司的面试官继续追问”“假设你在面试”“面试官会问”等旁白。
@@ -178,6 +181,7 @@ public class InterviewPromptBuilder {
                 7. 优先沿候选人刚才的回答向下一层追问。例如候选人说用了 Redis String 和 Set，就追问各自保存什么业务数据、key 如何设计，或为何不选 Hash/ZSet；不要重新问整个项目流程。
                 8. 禁止输出“请补充你没有展开的技术细节”“请详细说说”“说明问题现象、排查过程和结果”等可套用于任何项目的泛化问题。
                 9. 如果回答信息很少，应给出明确作答范围，而不是让候选人自行猜测方向。
+                10. 如果前序追问链不为空，新问题必须比上一轮更具体，不能重复已经问过的点。
                 """.formatted(
                 blankToDefault(request.resumeSummary(), "未提供"),
                 blankToDefault(request.jobTitle(), "未填写，本次只依据简历和回答"),
@@ -188,8 +192,16 @@ public class InterviewPromptBuilder {
                 blankToDefault(request.evaluationPoints(), "未提供"),
                 blankToDefault(request.followUpDirection(), "未提供"),
                 blankToDefault(request.aiFeedback(), "未提供"),
-                blankToDefault(request.fallbackQuestion(), "未提供")
+                blankToDefault(request.fallbackQuestion(), "未提供"),
+                buildPreviousFollowUpText(request.previousFollowUps())
         );
+    }
+
+    private String buildPreviousFollowUpText(List<String> previousFollowUps) {
+        if (previousFollowUps == null || previousFollowUps.isEmpty()) {
+            return "无";
+        }
+        return String.join("\n", previousFollowUps);
     }
 
     private String blankToDefault(String value, String defaultValue) {

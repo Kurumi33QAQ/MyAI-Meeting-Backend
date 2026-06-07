@@ -10,6 +10,8 @@ import com.zsj.meetingagent.agent.model.InterviewOrchestrationResult;
 import com.zsj.meetingagent.agent.orchestrator.InterviewOrchestrator;
 import com.zsj.meetingagent.interview.dto.CreateInterviewSessionRequest;
 import com.zsj.meetingagent.interview.dto.SubmitInterviewAnswerRequest;
+import com.zsj.meetingagent.interview.config.InterviewProperties;
+import com.zsj.meetingagent.interview.entity.InterviewFollowUpRound;
 import com.zsj.meetingagent.interview.entity.InterviewQuestionSnapshotDocument;
 import com.zsj.meetingagent.interview.entity.InterviewSessionDocument;
 import com.zsj.meetingagent.interview.enums.InterviewSessionStatus;
@@ -169,7 +171,8 @@ class DefaultInterviewServiceTest {
                 jobIntelligenceSearchService,
                 new DefaultAnswerScoringService(),
                 new DefaultInterviewProgressPolicy(),
-                followUpQuestionGenerator
+                followUpQuestionGenerator,
+                new InterviewProperties()
         );
 
         InterviewSessionResponse created = service.createSession("alice", new CreateInterviewSessionRequest(
@@ -213,7 +216,8 @@ class DefaultInterviewServiceTest {
                 jobIntelligenceSearchService,
                 new DefaultAnswerScoringService(),
                 new DefaultInterviewProgressPolicy(),
-                followUpQuestionGenerator
+                followUpQuestionGenerator,
+                new InterviewProperties()
         );
         when(runtimeService.recover(anyString(), anyString())).thenReturn(new com.zsj.meetingagent.interview.runtime.InterviewRuntimeState(
                 "session-1",
@@ -235,9 +239,100 @@ class DefaultInterviewServiceTest {
         assertThat(response.currentQuestionIndex()).isEqualTo(2);
     }
 
+    @Test
+    void followUpAnswerCanTriggerSecondFollowUpRound() {
+        InterviewSessionDocument session = new InterviewSessionDocument();
+        session.setSessionId("session-1");
+        session.setUsername("alice");
+        session.setResumeId("resume-1");
+        session.setStatus(InterviewSessionStatus.ANSWERING);
+        session.setAdaptiveQuestionCount(true);
+        session.setQuestionCount(8);
+        session.setMaxQuestionCount(15);
+        session.setAnsweredCount(1);
+        session.setUpdatedAt(Instant.now());
+
+        InterviewFollowUpRound firstFollowUp = new InterviewFollowUpRound();
+        firstFollowUp.setRound(1);
+        firstFollowUp.setQuestion("你项目中 Redis String 和 Set 分别保存了什么业务数据？");
+        firstFollowUp.setCreatedAt(Instant.now());
+        InterviewQuestionSnapshotDocument question = new InterviewQuestionSnapshotDocument();
+        question.setQuestionId("question-1");
+        question.setSessionId("session-1");
+        question.setUsername("alice");
+        question.setQuestionOrder(1);
+        question.setQuestion("请说明项目中的 Redis 使用方式");
+        question.setEvaluationPoints("Redis 数据结构、key 设计、过期策略");
+        question.setFollowUpDirection("追问 Redis 设计细节");
+        question.setUserAnswer("用了 String 和 Set");
+        question.setScore(45);
+        question.setFollowUps(new ArrayList<>(List.of(firstFollowUp)));
+
+        AtomicReference<InterviewQuestionSnapshotDocument> questionRef = new AtomicReference<>(question);
+        when(sessionRepository.findBySessionIdAndUsername("session-1", "alice")).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(InterviewSessionDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(questionRepository.findByQuestionIdAndSessionIdAndUsername("question-1", "session-1", "alice"))
+                .thenReturn(Optional.of(question));
+        when(questionRepository.findBySessionIdAndUsernameOrderByQuestionOrderAsc("session-1", "alice"))
+                .thenAnswer(invocation -> List.of(questionRef.get()));
+        when(questionRepository.save(any(InterviewQuestionSnapshotDocument.class))).thenAnswer(invocation -> {
+            InterviewQuestionSnapshotDocument saved = invocation.getArgument(0);
+            questionRef.set(saved);
+            return saved;
+        });
+        when(resumeService.getResume("alice", "resume-1"))
+                .thenReturn(new ResumeResponse("resume-1", "resume.txt", "text/plain", 100L, "RESUME", "MyMallPlatform 使用 Redis、RabbitMQ 和 JWT", Instant.now(), Instant.now()));
+        when(aiChatService.chat(any(AiChatRequest.class)))
+                .thenReturn(new AiChatResponse("回答仍缺少 key 设计和过期策略", "gpt-4o-mini", "mock", 1, true));
+        when(followUpDecisionService.decide(any())).thenReturn(new FollowUpDecision(
+                true,
+                "继续追问 Redis key 和过期策略",
+                "F1 回答仍缺少 Redis 设计细节",
+                List.of(new FollowUpRuleTrace("缺失考点判断节点", true, "缺少 key 和过期策略"))
+        ));
+        when(followUpQuestionGenerator.generate(any()))
+                .thenReturn("你在这个项目里 Redis String 和 Set 的 key 分别如何命名，过期时间为什么这样设置？");
+        when(interviewRecordMapper.updateProgress(any())).thenReturn(1);
+        when(runtimeService.recordSnapshot(any(), any(), anyString(), anyString())).thenReturn(null);
+
+        InterviewAnswerResponse response = newService().submitAnswer(
+                "alice",
+                "session-1",
+                new SubmitInterviewAnswerRequest("question-1-F1", "String 存登录状态，Set 存用户集合，但是过期时间没考虑清楚。")
+        );
+
+        assertThat(response.isFollowUp()).isTrue();
+        assertThat(response.followUpCount()).isEqualTo(2);
+        assertThat(response.nextQuestionNumber()).isEqualTo("question-1-F2");
+        assertThat(questionRef.get().getFollowUps()).hasSize(2);
+        assertThat(questionRef.get().getFollowUps().get(1).getQuestion()).contains("key");
+    }
+
     private AiModelProperties testAiModelProperties() {
         AiModelProperties properties = new AiModelProperties();
         properties.setDefaultModel("gpt-4o-mini");
         return properties;
+    }
+
+    private DefaultInterviewService newService() {
+        return new DefaultInterviewService(
+                resumeService,
+                aiChatService,
+                testAiModelProperties(),
+                new InterviewPromptBuilder(),
+                interviewRecordMapper,
+                sessionRepository,
+                questionRepository,
+                runtimeService,
+                knowledgeIngestionService,
+                retrievalService,
+                interviewOrchestrator,
+                followUpDecisionService,
+                jobIntelligenceSearchService,
+                new DefaultAnswerScoringService(),
+                new DefaultInterviewProgressPolicy(),
+                followUpQuestionGenerator,
+                new InterviewProperties()
+        );
     }
 }

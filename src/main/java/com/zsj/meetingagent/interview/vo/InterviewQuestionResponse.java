@@ -25,6 +25,7 @@ public record InterviewQuestionResponse(
         Integer followUpScore,
         String followUpFeedback,
         String followUpRuleTrace,
+        List<InterviewFollowUpResponse> followUps,
         Instant createdAt,
         Instant answeredAt,
         Instant followUpAnsweredAt

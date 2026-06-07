@@ -90,6 +90,7 @@ class InterviewControllerTest {
                 null,
                 null,
                 null,
+                List.of(),
                 now,
                 null,
                 null
@@ -112,7 +113,7 @@ class InterviewControllerTest {
         when(interviewService.createSession(anyString(), any())).thenReturn(session);
         when(interviewService.generateQuestions(anyString(), anyString())).thenReturn(session);
         when(interviewService.submitAnswer(anyString(), anyString(), any()))
-                .thenReturn(new InterviewAnswerResponse("session-1", "question-1", 90, "回答较完整", "请补充性能指标", "缺失考点判断节点[命中]", InterviewSessionStatus.ANSWERING, 1, 8));
+                .thenReturn(new InterviewAnswerResponse("session-1", "question-1", 90, "回答较完整", "请补充性能指标", "question-1-F1", true, 1, "缺失考点判断节点[命中]", InterviewSessionStatus.ANSWERING, 1, 8));
         when(interviewService.getReport(anyString(), anyString()))
                 .thenReturn(new InterviewReportResponse("session-1", InterviewSessionStatus.COMPLETED, 90, 1, 1, "整体表现较好", List.of(question)));
         when(interviewService.listAgentTraces(anyString(), anyString()))

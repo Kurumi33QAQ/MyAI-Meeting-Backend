@@ -92,6 +92,11 @@ app:
     api-key: ${TAVILY_API_KEY:}
     max-results: ${JOB_INTELLIGENCE_MAX_RESULTS:5}
     timeout: ${JOB_INTELLIGENCE_TIMEOUT:8s}
+  interview:
+    initial-question-count: ${INTERVIEW_INITIAL_QUESTION_COUNT:8}
+    standard-question-count: ${INTERVIEW_STANDARD_QUESTION_COUNT:12}
+    max-question-count: ${INTERVIEW_MAX_QUESTION_COUNT:15}
+    max-follow-up-count: ${INTERVIEW_MAX_FOLLOW_UP_COUNT:3}
   evaluation:
     default-dataset-path: ${EVALUATION_DATASET_PATH:classpath:evaluation/eval_cases.json}
     report-dir: ${EVALUATION_REPORT_DIR:reports/evaluation}
