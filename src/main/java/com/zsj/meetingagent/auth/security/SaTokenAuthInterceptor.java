@@ -102,6 +102,9 @@ public class SaTokenAuthInterceptor implements HandlerInterceptor {
             path = path.substring(contextPath.length());
         }
         String finalPath = path;
+        if (finalPath.startsWith("/api/media/tts/tasks/") && finalPath.endsWith("/audio")) {
+            return true;
+        }
         return PUBLIC_PATHS.stream().anyMatch(pattern -> pathMatcher.match(pattern, finalPath));
     }
 }
