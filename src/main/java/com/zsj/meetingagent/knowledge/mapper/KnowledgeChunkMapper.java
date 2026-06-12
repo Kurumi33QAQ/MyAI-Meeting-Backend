@@ -69,4 +69,37 @@ public interface KnowledgeChunkMapper {
             ORDER BY updated_at DESC, section_order ASC, chunk_index ASC
             """)
     List<KnowledgeChunk> findActiveByUsername(@Param("username") String username);
+
+    @Select("""
+            <script>
+            SELECT
+                id,
+                chunk_id AS chunkId,
+                document_id AS documentId,
+                username,
+                source_id AS sourceId,
+                document_type AS documentType,
+                section_name AS sectionName,
+                chunk_index AS chunkIndex,
+                section_order AS sectionOrder,
+                content,
+                summary,
+                tags,
+                metadata_json AS metadataJson,
+                created_at AS createdAt,
+                updated_at AS updatedAt,
+                deleted
+            FROM knowledge_chunk
+            WHERE username = #{username}
+              AND deleted = 0
+              AND chunk_id IN
+              <foreach collection="chunkIds" item="chunkId" open="(" separator="," close=")">
+                #{chunkId}
+              </foreach>
+            </script>
+            """)
+    List<KnowledgeChunk> findActiveByChunkIds(
+            @Param("username") String username,
+            @Param("chunkIds") List<String> chunkIds
+    );
 }

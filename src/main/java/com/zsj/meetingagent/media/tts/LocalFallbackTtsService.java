@@ -1,6 +1,7 @@
 package com.zsj.meetingagent.media.tts;
 
 import org.springframework.stereotype.Service;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -16,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 当前生成一段短静音 WAV，保证前端播放链路可验证；真实发音供应商后续只需替换本服务实现。
  */
 @Service
+@ConditionalOnProperty(prefix = "app.media.tts", name = "provider", havingValue = "local", matchIfMissing = true)
 public class LocalFallbackTtsService implements TtsService {
 
     private static final int SAMPLE_RATE = 16000;

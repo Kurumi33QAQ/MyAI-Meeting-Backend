@@ -65,3 +65,7 @@ app:
     answer-hit-threshold: 0.35
     citation-hit-threshold: 0.25
     self-check-min-confidence: 0.2
+  rag:
+    vector:
+      enabled: false
+      embedding-mock-enabled: true

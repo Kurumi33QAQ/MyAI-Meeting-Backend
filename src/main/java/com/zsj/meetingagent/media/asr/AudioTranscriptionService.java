@@ -8,7 +8,7 @@ public interface AudioTranscriptionService {
 
     AudioTranscriptionSession startSession(String websocketSessionId, String username, String clientUserId);
 
-    String acceptAudioChunk(AudioTranscriptionSession session, int bytesLength);
+    String acceptAudioChunk(AudioTranscriptionSession session, byte[] audioBytes);
 
     String stopSession(AudioTranscriptionSession session);
 }

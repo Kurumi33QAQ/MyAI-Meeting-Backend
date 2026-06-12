@@ -96,11 +96,13 @@ public class SpeechTranscriptionWebSocketHandler extends AbstractWebSocketHandle
             sendEvent(session, "error", Map.of("message", "语音转写会话不存在，请重新连接"));
             return;
         }
-        String text = transcriptionService.acceptAudioChunk(transcriptionSession, message.getPayloadLength());
+        byte[] audioBytes = new byte[message.getPayloadLength()];
+        message.getPayload().get(audioBytes);
+        String text = transcriptionService.acceptAudioChunk(transcriptionSession, audioBytes);
         if (StringUtils.hasText(text)) {
             sendEvent(session, "transcription", Map.of(
                     "data", text,
-                    "message", "当前使用本地降级转写"
+                    "message", "语音转写返回增量结果"
             ));
         }
     }

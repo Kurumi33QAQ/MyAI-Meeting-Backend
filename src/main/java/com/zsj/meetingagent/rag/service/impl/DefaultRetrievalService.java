@@ -4,7 +4,9 @@ import com.zsj.meetingagent.knowledge.entity.KnowledgeChunk;
 import com.zsj.meetingagent.knowledge.mapper.KnowledgeChunkMapper;
 import com.zsj.meetingagent.rag.config.RagProperties;
 import com.zsj.meetingagent.rag.dto.RetrieveEvidenceRequest;
+import com.zsj.meetingagent.rag.model.VectorSearchResult;
 import com.zsj.meetingagent.rag.service.RetrievalService;
+import com.zsj.meetingagent.rag.service.VectorIndexService;
 import com.zsj.meetingagent.rag.vo.EvidenceResponse;
 import com.zsj.meetingagent.rag.vo.RetrieveEvidenceResponse;
 import org.springframework.stereotype.Service;
@@ -14,10 +16,13 @@ import org.springframework.util.StringUtils;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 默认 RAG 检索服务。
- * 当前实现为“候选召回 topK -> rerank 重排序 -> 选择 finalK”，后续可把第一阶段替换成向量数据库。
+ * 支持“pgvector 向量召回 topK -> 业务 rerank -> 选择 finalK”，未启用向量库时回退到本地文本召回。
  */
 @Service
 public class DefaultRetrievalService implements RetrievalService {
@@ -25,15 +30,18 @@ public class DefaultRetrievalService implements RetrievalService {
     private final KnowledgeChunkMapper chunkMapper;
     private final TextScoreService textScoreService;
     private final RagProperties ragProperties;
+    private final VectorIndexService vectorIndexService;
 
     public DefaultRetrievalService(
             KnowledgeChunkMapper chunkMapper,
             TextScoreService textScoreService,
-            RagProperties ragProperties
+            RagProperties ragProperties,
+            VectorIndexService vectorIndexService
     ) {
         this.chunkMapper = chunkMapper;
         this.textScoreService = textScoreService;
         this.ragProperties = ragProperties;
+        this.vectorIndexService = vectorIndexService;
     }
 
     @Override
@@ -42,13 +50,13 @@ public class DefaultRetrievalService implements RetrievalService {
         int finalK = normalize(request.finalK(), ragProperties.getDefaultFinalK(), 1, Math.min(topK, 10));
         List<String> documentTypes = request.documentTypes();
 
-        List<ScoredChunk> recalled = chunkMapper.findActiveByUsername(username).stream()
-                .filter(chunk -> matchDocumentType(chunk, documentTypes))
-                .map(chunk -> scoreRecall(request.query(), chunk))
-                .filter(scored -> scored.recallScore() > 0)
-                .sorted(Comparator.comparingDouble(ScoredChunk::recallScore).reversed())
-                .limit(topK)
-                .toList();
+        List<ScoredChunk> recalled = vectorIndexService.enabled()
+                ? vectorRecall(username, request.query(), documentTypes, topK)
+                : localTextRecall(username, request.query(), documentTypes, topK);
+
+        if (recalled.isEmpty() && vectorIndexService.enabled()) {
+            recalled = localTextRecall(username, request.query(), documentTypes, topK);
+        }
 
         List<EvidenceResponse> selected = recalled.stream()
                 .map(scored -> toEvidence(scored, rerank(request.query(), scored)))
@@ -105,6 +113,35 @@ public class DefaultRetrievalService implements RetrievalService {
                 chunk.content()
         );
         return new ScoredChunk(chunk, textScoreService.score(query, candidate));
+    }
+
+    private List<ScoredChunk> vectorRecall(String username, String query, List<String> documentTypes, int topK) {
+        List<VectorSearchResult> vectorResults = vectorIndexService.search(username, query, documentTypes, topK);
+        if (vectorResults.isEmpty()) {
+            return List.of();
+        }
+        List<String> chunkIds = vectorResults.stream()
+                .map(VectorSearchResult::chunkId)
+                .toList();
+        Map<String, KnowledgeChunk> chunks = chunkMapper.findActiveByChunkIds(username, chunkIds).stream()
+                .collect(Collectors.toMap(KnowledgeChunk::chunkId, Function.identity()));
+        return vectorResults.stream()
+                .map(result -> {
+                    KnowledgeChunk chunk = chunks.get(result.chunkId());
+                    return chunk == null ? null : new ScoredChunk(chunk, result.similarity());
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    private List<ScoredChunk> localTextRecall(String username, String query, List<String> documentTypes, int topK) {
+        return chunkMapper.findActiveByUsername(username).stream()
+                .filter(chunk -> matchDocumentType(chunk, documentTypes))
+                .map(chunk -> scoreRecall(query, chunk))
+                .filter(scored -> scored.recallScore() > 0)
+                .sorted(Comparator.comparingDouble(ScoredChunk::recallScore).reversed())
+                .limit(topK)
+                .toList();
     }
 
     private double rerank(String query, ScoredChunk scored) {

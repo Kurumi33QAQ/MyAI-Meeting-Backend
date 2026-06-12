@@ -5,6 +5,9 @@ import com.zsj.meetingagent.common.result.ApiResponse;
 import com.zsj.meetingagent.evaluation.config.EvaluationProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zsj.meetingagent.media.MediaProviderProperties;
+import com.zsj.meetingagent.rag.config.RagProperties;
+import com.zsj.meetingagent.resume.parser.OcrProperties;
 import org.bson.Document;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -40,6 +43,9 @@ public class SystemReadinessController {
     private final EvaluationProperties evaluationProperties;
     private final ResourceLoader resourceLoader;
     private final ObjectMapper objectMapper;
+    private final RagProperties ragProperties;
+    private final OcrProperties ocrProperties;
+    private final MediaProviderProperties mediaProviderProperties;
 
     public SystemReadinessController(DataSource dataSource,
                                      MongoTemplate mongoTemplate,
@@ -48,7 +54,10 @@ public class SystemReadinessController {
                                      Environment environment,
                                      EvaluationProperties evaluationProperties,
                                      ResourceLoader resourceLoader,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     RagProperties ragProperties,
+                                     OcrProperties ocrProperties,
+                                     MediaProviderProperties mediaProviderProperties) {
         this.dataSource = dataSource;
         this.mongoTemplate = mongoTemplate;
         this.redisTemplate = redisTemplate;
@@ -57,6 +66,9 @@ public class SystemReadinessController {
         this.evaluationProperties = evaluationProperties;
         this.resourceLoader = resourceLoader;
         this.objectMapper = objectMapper;
+        this.ragProperties = ragProperties;
+        this.ocrProperties = ocrProperties;
+        this.mediaProviderProperties = mediaProviderProperties;
     }
 
     @GetMapping("/api/system/readiness")
@@ -67,14 +79,21 @@ public class SystemReadinessController {
         DependencyCheck redis = checkRedis();
         DependencyCheck ai = checkAiConfig();
         DependencyCheck evaluation = checkEvaluationDataset();
+        DependencyCheck pgvector = checkPgVectorConfig();
+        DependencyCheck ocr = checkOcrConfig();
+        DependencyCheck media = checkMediaConfig();
 
         dependencies.put("mysql", mysql.body());
         dependencies.put("mongodb", mongo.body());
         dependencies.put("redis", redis.body());
         dependencies.put("ai", ai.body());
         dependencies.put("evaluation", evaluation.body());
+        dependencies.put("pgvector", pgvector.body());
+        dependencies.put("ocr", ocr.body());
+        dependencies.put("media", media.body());
 
-        boolean coreReady = mysql.up() && mongo.up() && redis.up() && ai.up() && evaluation.up();
+        boolean coreReady = mysql.up() && mongo.up() && redis.up() && ai.up() && evaluation.up()
+                && pgvector.up() && ocr.up() && media.up();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", coreReady ? "UP" : "DEGRADED");
         body.put("service", "meeting-agent-backend");
@@ -166,6 +185,54 @@ public class SystemReadinessController {
         }
     }
 
+    private DependencyCheck checkPgVectorConfig() {
+        RagProperties.Vector vector = ragProperties.getVector();
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("enabled", vector.isEnabled());
+        detail.put("required", vector.isRequired());
+        detail.put("jdbcUrl", maskJdbcUrl(vector.getJdbcUrl()));
+        detail.put("dimension", vector.getDimension());
+        detail.put("embeddingModel", vector.getEmbeddingModel());
+        detail.put("embeddingMockEnabled", vector.isEmbeddingMockEnabled());
+        if (!vector.isEnabled()) {
+            return DependencyCheck.up("pgvector 未启用，RAG 会使用本地文本召回", detail);
+        }
+        boolean apiKeyConfigured = vector.isEmbeddingMockEnabled()
+                || hasRealApiKey();
+        if (apiKeyConfigured) {
+            return DependencyCheck.up("pgvector 已启用，入库时会写入向量索引", detail);
+        }
+        return DependencyCheck.down("pgvector 已启用但缺少真实 Embedding API Key", detail);
+    }
+
+    private DependencyCheck checkOcrConfig() {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("enabled", ocrProperties.isEnabled());
+        detail.put("command", ocrProperties.getCommand());
+        detail.put("language", ocrProperties.getLanguage());
+        detail.put("maxPages", ocrProperties.getMaxPages());
+        return DependencyCheck.up(
+                ocrProperties.isEnabled()
+                        ? "OCR 已开启，扫描版 PDF 会调用 Tesseract"
+                        : "OCR 未开启，扫描版 PDF 会提示用户上传文字层 PDF",
+                detail
+        );
+    }
+
+    private DependencyCheck checkMediaConfig() {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("asrProvider", mediaProviderProperties.getAsr().getProvider());
+        detail.put("asrModel", mediaProviderProperties.getAsr().getModel());
+        detail.put("ttsProvider", mediaProviderProperties.getTts().getProvider());
+        detail.put("ttsModel", mediaProviderProperties.getTts().getModel());
+        boolean requiresKey = "openai".equalsIgnoreCase(mediaProviderProperties.getAsr().getProvider())
+                || "openai".equalsIgnoreCase(mediaProviderProperties.getTts().getProvider());
+        if (!requiresKey || hasRealApiKey()) {
+            return DependencyCheck.up(requiresKey ? "真实媒体供应商配置完整" : "媒体能力使用本地降级模式", detail);
+        }
+        return DependencyCheck.down("媒体供应商已配置为 openai，但缺少真实 OPENAI_API_KEY", detail);
+    }
+
     private String maskJdbcUrl(String url) {
         if (!StringUtils.hasText(url)) {
             return "";
@@ -175,6 +242,13 @@ public class SystemReadinessController {
             return url;
         }
         return "jdbc:***" + url.substring(credentialIndex);
+    }
+
+    private boolean hasRealApiKey() {
+        String apiKey = environment.getProperty("spring.ai.openai.api-key", "");
+        return StringUtils.hasText(apiKey)
+                && !apiKey.contains("dummy")
+                && !apiKey.contains("test");
     }
 
     private String rootMessage(Exception e) {

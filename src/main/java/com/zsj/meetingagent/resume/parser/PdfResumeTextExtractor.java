@@ -4,6 +4,7 @@ import com.zsj.meetingagent.common.exception.BusinessException;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -16,6 +17,22 @@ import java.io.IOException;
 @Component
 public class PdfResumeTextExtractor {
 
+    private final OcrService ocrService;
+
+    public PdfResumeTextExtractor() {
+        this(pdfBytes -> {
+            throw new BusinessException(
+                    "R0406",
+                    "未能从 PDF 中提取文字，请上传带文字层的 PDF；扫描版简历需要开启 OCR 能力"
+            );
+        });
+    }
+
+    @Autowired
+    public PdfResumeTextExtractor(OcrService ocrService) {
+        this.ocrService = ocrService;
+    }
+
     public String extract(byte[] pdfBytes) {
         if (pdfBytes == null || pdfBytes.length == 0) {
             throw new BusinessException("R0401", "PDF 简历内容不能为空");
@@ -25,10 +42,11 @@ public class PdfResumeTextExtractor {
             stripper.setSortByPosition(true);
             String text = normalize(stripper.getText(document));
             if (!StringUtils.hasText(text)) {
-                throw new BusinessException(
-                        "R0406",
-                        "未能从 PDF 中提取文字，请上传带文字层的 PDF；扫描版简历需要后续 OCR 能力支持"
-                );
+                /*
+                 * PDFBox 只能稳定读取文字层。
+                 * 如果是扫描件，交给 OCR 服务渲染页面并调用 Tesseract 识别。
+                 */
+                return ocrService.recognizePdf(pdfBytes);
             }
             return text;
         } catch (BusinessException ex) {

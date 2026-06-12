@@ -8,6 +8,7 @@ import com.zsj.meetingagent.knowledge.mapper.KnowledgeDocumentMapper;
 import com.zsj.meetingagent.rag.model.StructuredChunk;
 import com.zsj.meetingagent.rag.service.KnowledgeIngestionService;
 import com.zsj.meetingagent.rag.service.StructuredChunkService;
+import com.zsj.meetingagent.rag.service.VectorIndexService;
 import com.zsj.meetingagent.resume.entity.UploadedFile;
 import com.zsj.meetingagent.resume.mapper.UploadedFileMapper;
 import org.springframework.stereotype.Service;
@@ -30,17 +31,20 @@ public class DefaultKnowledgeIngestionService implements KnowledgeIngestionServi
     private final KnowledgeDocumentMapper documentMapper;
     private final KnowledgeChunkMapper chunkMapper;
     private final StructuredChunkService structuredChunkService;
+    private final VectorIndexService vectorIndexService;
 
     public DefaultKnowledgeIngestionService(
             UploadedFileMapper uploadedFileMapper,
             KnowledgeDocumentMapper documentMapper,
             KnowledgeChunkMapper chunkMapper,
-            StructuredChunkService structuredChunkService
+            StructuredChunkService structuredChunkService,
+            VectorIndexService vectorIndexService
     ) {
         this.uploadedFileMapper = uploadedFileMapper;
         this.documentMapper = documentMapper;
         this.chunkMapper = chunkMapper;
         this.structuredChunkService = structuredChunkService;
+        this.vectorIndexService = vectorIndexService;
     }
 
     @Override
@@ -89,6 +93,7 @@ public class DefaultKnowledgeIngestionService implements KnowledgeIngestionServi
          */
         documentMapper.softDeleteBySource(username, sourceId, documentType, now);
         chunkMapper.softDeleteBySource(username, sourceId, documentType, now);
+        vectorIndexService.deleteBySource(username, sourceId, documentType);
 
         String documentId = UUID.randomUUID().toString();
         documentMapper.insert(new KnowledgeDocument(
@@ -105,7 +110,7 @@ public class DefaultKnowledgeIngestionService implements KnowledgeIngestionServi
         ));
 
         for (StructuredChunk chunk : chunks) {
-            chunkMapper.insert(new KnowledgeChunk(
+            KnowledgeChunk knowledgeChunk = new KnowledgeChunk(
                     null,
                     UUID.randomUUID().toString(),
                     documentId,
@@ -122,7 +127,13 @@ public class DefaultKnowledgeIngestionService implements KnowledgeIngestionServi
                     now,
                     now,
                     NOT_DELETED
-            ));
+            );
+            chunkMapper.insert(knowledgeChunk);
+            /*
+             * MySQL 是 chunk 主数据，pgvector 是可选索引。
+             * 向量索引写入失败时是否阻断上传，由 app.rag.vector.required 控制。
+             */
+            vectorIndexService.upsertChunk(knowledgeChunk);
         }
     }
 

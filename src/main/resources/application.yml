@@ -85,6 +85,16 @@ app:
     default-top-k: ${RAG_DEFAULT_TOP_K:20}
     default-final-k: ${RAG_DEFAULT_FINAL_K:5}
     min-confidence: ${RAG_MIN_CONFIDENCE:0.15}
+    vector:
+      enabled: ${RAG_VECTOR_ENABLED:false}
+      required: ${RAG_VECTOR_REQUIRED:false}
+      jdbc-url: ${PGVECTOR_JDBC_URL:jdbc:postgresql://localhost:5432/my_ai_meeting_vector}
+      username: ${PGVECTOR_USERNAME:postgres}
+      password: ${PGVECTOR_PASSWORD:1234}
+      dimension: ${RAG_VECTOR_DIMENSION:1536}
+      table-name: ${RAG_VECTOR_TABLE:rag_vector_chunk}
+      embedding-model: ${RAG_EMBEDDING_MODEL:text-embedding-3-small}
+      embedding-mock-enabled: ${RAG_VECTOR_EMBEDDING_MOCK_ENABLED:${RAG_EMBEDDING_MOCK_ENABLED:false}}
   job-intelligence:
     enabled: ${JOB_INTELLIGENCE_SEARCH_ENABLED:true}
     provider: ${JOB_INTELLIGENCE_PROVIDER:tavily}
@@ -92,11 +102,29 @@ app:
     api-key: ${TAVILY_API_KEY:}
     max-results: ${JOB_INTELLIGENCE_MAX_RESULTS:5}
     timeout: ${JOB_INTELLIGENCE_TIMEOUT:8s}
+  media:
+    asr:
+      provider: ${MEDIA_ASR_PROVIDER:local}
+      model: ${MEDIA_ASR_MODEL:whisper-1}
+      language: ${MEDIA_ASR_LANGUAGE:zh}
+    tts:
+      provider: ${MEDIA_TTS_PROVIDER:local}
+      model: ${MEDIA_TTS_MODEL:tts-1}
+      voice: ${MEDIA_TTS_VOICE:alloy}
+      response-format: ${MEDIA_TTS_RESPONSE_FORMAT:wav}
   interview:
     initial-question-count: ${INTERVIEW_INITIAL_QUESTION_COUNT:8}
     standard-question-count: ${INTERVIEW_STANDARD_QUESTION_COUNT:12}
     max-question-count: ${INTERVIEW_MAX_QUESTION_COUNT:15}
     max-follow-up-count: ${INTERVIEW_MAX_FOLLOW_UP_COUNT:3}
+  resume:
+    ocr:
+      enabled: ${RESUME_OCR_ENABLED:false}
+      command: ${RESUME_OCR_COMMAND:${TESSERACT_COMMAND:tesseract}}
+      language: ${RESUME_OCR_LANGUAGE:${TESSERACT_LANGUAGE:chi_sim+eng}}
+      dpi: ${RESUME_OCR_DPI:220}
+      max-pages: ${RESUME_OCR_MAX_PAGES:5}
+      timeout: ${RESUME_OCR_TIMEOUT:20s}
   evaluation:
     default-dataset-path: ${EVALUATION_DATASET_PATH:classpath:evaluation/eval_cases.json}
     report-dir: ${EVALUATION_REPORT_DIR:reports/evaluation}

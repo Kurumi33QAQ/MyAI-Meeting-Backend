@@ -47,6 +47,15 @@ class PdfResumeTextExtractorTest {
                 });
     }
 
+    @Test
+    void shouldUseOcrWhenPdfHasNoTextLayer() throws Exception {
+        PdfResumeTextExtractor ocrExtractor = new PdfResumeTextExtractor(pdfBytes -> "OCR 识别出的 Java 后端项目经历");
+
+        String result = ocrExtractor.extract(createBlankPdf());
+
+        assertThat(result).contains("OCR 识别出的 Java 后端项目经历");
+    }
+
     private byte[] createPdf(String text) throws Exception {
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {

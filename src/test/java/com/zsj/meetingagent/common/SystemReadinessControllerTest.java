@@ -31,6 +31,10 @@ class SystemReadinessControllerTest {
                 .andExpect(jsonPath("$.data.dependencies.mongodb.status").value("UP"))
                 .andExpect(jsonPath("$.data.dependencies.redis.status").value("UP"))
                 .andExpect(jsonPath("$.data.dependencies.ai.mockEnabled").value(true))
-                .andExpect(jsonPath("$.data.dependencies.evaluation.caseCount", is(greaterThan(0))));
+                .andExpect(jsonPath("$.data.dependencies.evaluation.caseCount", is(greaterThan(0))))
+                .andExpect(jsonPath("$.data.dependencies.pgvector.enabled").value(false))
+                .andExpect(jsonPath("$.data.dependencies.ocr.enabled").value(false))
+                .andExpect(jsonPath("$.data.dependencies.media.asrProvider").value("local"))
+                .andExpect(jsonPath("$.data.dependencies.media.ttsProvider").value("local"));
     }
 }

@@ -1,6 +1,7 @@
 package com.zsj.meetingagent.media.asr;
 
 import java.time.Instant;
+import java.io.ByteArrayOutputStream;
 
 /**
  * 音频转写会话状态。
@@ -12,6 +13,7 @@ public class AudioTranscriptionSession {
     private final String username;
     private final String clientUserId;
     private final Instant startedAt;
+    private final ByteArrayOutputStream audioBuffer = new ByteArrayOutputStream();
     private int audioChunkCount;
     private boolean fallbackNoticeSent;
 
@@ -44,6 +46,18 @@ public class AudioTranscriptionSession {
 
     public void increaseAudioChunkCount() {
         this.audioChunkCount++;
+    }
+
+    public synchronized void appendAudio(byte[] audioBytes) {
+        if (audioBytes == null || audioBytes.length == 0) {
+            return;
+        }
+        audioBuffer.writeBytes(audioBytes);
+        increaseAudioChunkCount();
+    }
+
+    public synchronized byte[] audioBytes() {
+        return audioBuffer.toByteArray();
     }
 
     public boolean fallbackNoticeSent() {
