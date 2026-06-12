@@ -16,14 +16,14 @@ src/test/resources/evaluation/eval_cases.json
 | `java_backend` | Spring Boot、认证安全、MySQL/MongoDB 分工等 Java 后端基础 |
 | `ai_chat` | SSE 流式响应和 AI 对话工程化 |
 | `agent` / `interview_agent` | Thought-Action-Observation、多 Agent 协同和 trace |
-| `rag` / `rag_boundary` | 结构化 chunk、rerank、RAG 边界和不能夸大的能力 |
+| `rag` / `rag_boundary` | 结构化 chunk、pgvector 向量召回、本地召回兜底、业务 rerank、RAG 边界和不能夸大的能力 |
 | `interview_rule` | LiteFlow 追问规则链、追问质量和具体追问 |
 | `interview_flow` | 自适应题量、可选岗位/JD、无岗位默认行为 |
 | `ai_guard` | Redis Single-flight、限流、超时和中文降级 |
 | `runtime` | Redis 热态和 MongoDB 冷快照恢复 |
 | `evaluation` | 幻觉率、命中率、引用准确率等指标定义 |
-| `media_boundary` | ASR/TTS 降级边界 |
-| `resume_boundary` | 文本型 PDF 和扫描版 PDF/OCR 边界 |
+| `media_boundary` | OpenAI Compatible ASR/TTS 与讯飞专有协议的边界 |
+| `resume_boundary` | 文本型 PDF、扫描版 PDF 和 Tesseract OCR 边界 |
 | `api_design` | 新旧接口隔离和 `frontendadapter` 适配层 |
 
 ## 单条 case 格式
@@ -88,16 +88,25 @@ reports/evaluation/evaluation_report.md
 target/test-reports/evaluation
 ```
 
+如果只想在本地直接生成正式报告文件，可以运行：
+
+```bash
+mvn -q "-Dtest=EvaluationReportExportTest" test
+```
+
+该测试会读取默认 21 条评测集，并把报告写入 `reports/evaluation`。如果后续接入真实模型评测，必须在报告中标注数据集规模、模型、是否启用 pgvector、是否启用真实 embedding。
+
 ## 简历使用规则
 
 - 可以写“实现 evaluation 自动评测模块，支持四种策略对照和分类指标统计”。
 - 没有真实运行正式报告前，不要写“幻觉率降低 X%”。
-- 如果要写具体数字，必须注明测试集规模，例如“在 21 条中文项目问答测试集上……”，并且数字必须来自生成的报告。
+- 如果要写具体数字，必须注明测试集规模和评测条件，例如“在 21 条中文项目问答测试集上，使用当前本地评测器……”，并且数字必须来自生成的报告。
+- 如果只是跑了确定性评测器，不能把结果包装成真实线上大模型效果；只有接入真实模型、真实 embedding 和真实样本后，才能写成更强的实验结论。
 
 ## 后续扩充方向
 
 1. 增加真实简历和真实 JD 的 case，验证题目是否贴合项目经历。
 2. 增加追问质量 case，统计无效追问率、重复追问率和追问额外延迟。
 3. 增加 prompt injection case，验证低置信度拒答和安全边界。
-4. 接入向量数据库后，增加 `vector_rag` 策略与当前本地召回策略对照。
-5. 接入真实 ASR/TTS 后，增加媒体链路成功率和平均延迟统计。
+4. 增加 `local_rag`、`pgvector_rag`、`pgvector_rag_with_rerank` 的独立对照，区分本地文本召回和 pgvector 向量召回的命中差异。
+5. 增加真实 ASR/TTS 媒体链路成功率和平均延迟统计；如果以后接讯飞，需要单独增加讯飞协议 Provider 的验收 case。

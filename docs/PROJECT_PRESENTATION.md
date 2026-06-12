@@ -4,12 +4,12 @@
 
 ## 1. 一分钟项目介绍
 
-我做的是一个 AI 模拟面试 Agent 后端项目，目标是帮助用户上传简历后进行 Java 后端方向的模拟面试。项目支持登录注册、AI 对话、SSE 流式输出、简历解析、岗位/JD 可选输入、公开岗位情报检索、多 Agent 协同出题、LiteFlow 追问裁决、MongoDB 会话快照、Redis 限流和长会话恢复，还做了 evaluation 模块统计回答命中率、幻觉率、证据引用准确率和响应时间。
+我做的是一个 AI 模拟面试 Agent 后端项目，目标是帮助用户上传简历后进行 Java 后端方向的模拟面试。项目支持登录注册、AI 对话、SSE 流式输出、PDF/OCR 简历解析、岗位/JD 可选输入、公开岗位情报检索、pgvector 向量检索、多 Agent 协同出题、LiteFlow 追问裁决、MongoDB 会话快照、Redis 限流和长会话恢复，还做了 evaluation 模块统计回答命中率、幻觉率、证据引用准确率和响应时间。
 
 这个项目不是简单调大模型接口。我重点做了三件事：
 
 1. 把面试流程拆成后端可维护的业务状态机和多 Agent 编排。
-2. 用结构化 chunk、rerank、证据引用和自检机制降低模型乱答。
+2. 用结构化 chunk、embedding、pgvector、rerank、证据引用和自检机制降低模型乱答。
 3. 用 MySQL、MongoDB、Redis 分别承担结构化业务数据、长文本快照和高频状态缓存，让系统更像真实后端工程。
 
 ## 2. 简历项目经历写法
@@ -22,7 +22,7 @@ MyAI-Meeting-Backend｜AI 模拟面试 Agent 后端系统
 - 基于 Spring Boot 3、Sa-Token、Spring AI、MyBatis、MongoDB、Redis 实现 AI 模拟面试后端，支持登录注册、SSE 流式对话、简历上传、岗位/JD 可选输入、面试出题、追问评分、报告生成和历史记录。
 - 设计多 Agent 协同流程，将简历分析、岗位情报、问题设计、回答评分和总结报告拆分为独立角色，并将 Agent run 和 step trace 持久化到 MongoDB，便于排查模型决策过程。
 - 使用 LiteFlow 实现追问裁决规则链，将低分判断、缺失考点、AI 建议和追问次数限制从业务代码中拆出；追问问题由专用生成器结合简历、题目、回答和前序追问链生成，避免泛问。
-- 设计简历/JD 结构化 chunk、业务 rerank、evidence 引用和回答自检流程，提供 `/api/retrieval/evidence` 和 evaluation 对照实验，用真实测试集统计命中率、幻觉率、引用准确率和响应时间。
+- 设计简历/JD 结构化 chunk、OpenAI Compatible embedding、pgvector 向量召回、业务 rerank、evidence 引用和回答自检流程，提供 `/api/retrieval/evidence` 和 evaluation 对照实验，用真实测试集统计命中率、幻觉率、引用准确率和响应时间。
 - 基于 Redis 实现 AI 调用限流、Single-flight、超时降级和会话热态缓存；基于 MongoDB 保存聊天消息、面试运行快照和 Agent trace；基于 MySQL 保存用户、简历、面试记录和评测报告。
 ```
 
@@ -37,7 +37,7 @@ flowchart LR
     U["用户/前端页面"] --> A["Sa-Token 鉴权"]
     A --> R["简历上传/岗位信息"]
     R --> P["PDF 文本解析"]
-    P --> K["结构化 Chunk 与知识库"]
+    P --> K["结构化 Chunk 与 pgvector"]
     K --> G["多 Agent 编排"]
     G --> Q["问题生成"]
     Q --> I["面试答题"]
@@ -51,9 +51,9 @@ flowchart LR
 讲解顺序：
 
 1. 用户先通过 Sa-Token 登录，前端请求带 `Authorization: Bearer token`。
-2. 用户上传简历，后端用 PDFBox 提取文本，并保存简历文件和业务记录。
+2. 用户上传简历，后端先用 PDFBox 提取文字层；扫描版 PDF 可开启 Tesseract OCR 识别，并保存简历文件和业务记录。
 3. 如果用户填写岗位、公司或 JD，后端才触发 Tavily 岗位情报检索；如果用户不填，就只基于简历出题，不默认补岗位。
-4. 简历、JD、岗位情报会被拆成结构化 chunk，再通过检索和 rerank 选出 evidence。
+4. 简历、JD、岗位情报会被拆成结构化 chunk，开启 pgvector 后写入 embedding 向量索引，再通过向量召回和 rerank 选出 evidence。
 5. 多 Agent 协同生成题目、评分和总结，每一步都写入 MongoDB trace。
 6. 用户回答后，LiteFlow 规则链判断是否需要追问，专用追问生成器生成具体问题。
 7. MySQL 保存结构化业务数据，MongoDB 保存长文本和快照，Redis 保存登录态、限流和热态恢复数据。
@@ -137,6 +137,16 @@ Redis 保存高频短生命周期状态：
 
 原因：这些数据需要读写快、过期快，不适合每次都查 MySQL。
 
+### 5.4 PostgreSQL/pgvector
+
+pgvector 保存 chunk embedding 向量索引：
+
+- `chunk_id`：回指 MySQL 的 `knowledge_chunk.chunk_id`。
+- `embedding`：OpenAI Compatible embedding 生成的向量。
+- `document_type`、`section_name`、`metadata_json`：用于过滤和排查召回结果。
+
+原因：MySQL 继续承担业务主数据，pgvector 专门承担语义召回。这样既不需要把整个业务库迁到 PostgreSQL，也能让 RAG 从关键词召回升级到向量召回。
+
 ## 6. AI Agent 怎么讲
 
 本项目不是把一个 Prompt 写很长，而是把面试流程拆成多个角色：
@@ -162,17 +172,17 @@ Redis 保存高频短生命周期状态：
 
 当前 RAG 的定位要说准确：
 
-- 已完成结构化 chunk、本地召回、业务 rerank、evidence 引用和自检。
-- 还没有接入 Milvus、pgvector 等真实向量数据库。
-- 所以简历里不能写“基于向量数据库实现企业级 RAG”，应该写“设计并实现结构化 chunk + rerank + evaluation 的 RAG 增强链路”。
+- 已完成结构化 chunk、OpenAI Compatible embedding、pgvector 向量召回、本地召回兜底、业务 rerank、evidence 引用和自检。
+- pgvector 默认关闭，演示真实向量检索前需要启动 PostgreSQL/pgvector，并配置真实 embedding Key。
+- rerank 当前是业务规则重排，不是 cross-encoder 深度学习 reranker，所以不要把 rerank 夸大成训练过的模型。
 
 核心流程：
 
 1. 简历按基本信息、技能栈、项目经历、实习经历等切 chunk。
 2. JD 按岗位职责、任职要求、技术栈、加分项切 chunk。
 3. 面试知识按题目、参考答案、考察点、追问方向切 chunk。
-4. 先召回 topK。
-5. 再 rerank。
+4. 开启 pgvector 时先用 embedding 做向量召回 topK；未开启时回退到本地文本召回。
+5. 再做业务 rerank。
 6. 选 top3 到 top5 作为上下文。
 7. 回答必须引用 evidenceId。
 8. 证据不足时走低置信度拒答或降级。
@@ -235,7 +245,7 @@ AI 接口很贵，也容易慢，所以项目做了稳定性治理：
 
 ### Q6：RAG 现在是不是真向量库？
 
-答：当前不是向量数据库版，而是结构化 chunk + 本地召回 + rerank + evidence 引用。这样先把业务链路和评测闭环跑通。后续可以把召回层替换成 Spring AI VectorStore、pgvector 或 Milvus，evaluation 指标可以继续复用。
+答：现在已经接了可选 pgvector。MySQL 保存 chunk 主数据，pgvector 保存 embedding 向量索引。开启 `RAG_VECTOR_ENABLED=true` 后，入库时会把 chunk 写入 pgvector，检索时先向量召回 topK，再进入业务 rerank。不开启时仍回退到本地文本召回，保证开发环境可用。
 
 ### Q7：怎么保证模型不会乱编？
 
@@ -251,17 +261,17 @@ AI 接口很贵，也容易慢，所以项目做了稳定性治理：
 
 ### Q10：现在还有哪些边界？
 
-答：真实 ASR/TTS 供应商、OCR、向量数据库和深度 reranker 还没有接入；当前媒体是降级闭环，RAG 是本地检索版。README 已明确这些边界，避免简历夸大。
+答：pgvector、OCR、OpenAI Compatible ASR/TTS 已经做成可配置实现。当前仍要注意三个边界：第一，OCR 依赖本机 Tesseract 和语言包；第二，ASR/TTS 接的是 OpenAI Compatible 音频接口，不是讯飞专有协议；第三，rerank 仍是业务规则重排，不是深度学习 reranker。
 
 ## 11. 现场演示建议
 
 演示前按这个顺序：
 
-1. 启动 MongoDB、Redis、MySQL。
+1. 启动 MongoDB、Redis、MySQL；如果要演示向量检索，再启动 pgvector。
 2. 启动后端。
 3. 调 `GET /api/system/readiness`。
 4. 登录前端。
-5. 上传文本型 PDF 简历。
+5. 上传文本型 PDF 简历；如果要演示 OCR，开启 `RESUME_OCR_ENABLED=true` 并上传扫描件。
 6. 不填岗位做一轮，只看简历出题。
 7. 再填公司、岗位和 JD 做一轮，看题目差异。
 8. 对某题回答“不知道”，观察低分和追问。
@@ -273,14 +283,14 @@ AI 接口很贵，也容易慢，所以项目做了稳定性治理：
 
 不要说：
 
-- “我实现了企业级向量数据库 RAG。”
+- “我实现了企业级深度学习 reranker。”
 - “我接入了讯飞实时语音识别。”
 - “我的幻觉率降低了 80%。”
 - “这个项目完全复刻原项目。”
 
 应该说：
 
-- “当前 RAG 是结构化 chunk + rerank + evidence 引用，向量库是后续替换点。”
-- “当前语音链路完成 WebSocket 鉴权和降级闭环，真实供应商可以替换 service 实现。”
+- “当前 RAG 是结构化 chunk + pgvector 向量召回 + 业务 rerank + evidence 引用。”
+- “当前语音链路完成 WebSocket 鉴权，并可配置 OpenAI Compatible ASR/TTS；如果写讯飞，需要另接讯飞协议。”
 - “指标必须来自 evaluation 报告，没跑正式数据前不写具体百分比。”
 - “参考了原项目功能方向，但包名、接口风格、Prompt、目录结构和项目亮点是我自己重构的。”

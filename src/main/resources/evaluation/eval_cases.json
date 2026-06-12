@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "id": "java-backend-001",
     "question": "Spring Boot 自动配置的核心机制是什么？",
@@ -178,11 +178,11 @@
   {
     "id": "rag-003",
     "question": "为什么当前项目不能说已经接入向量数据库？",
-    "groundTruth": "当前项目实现的是结构化 chunk、本地文本召回和业务 rerank，并没有接入 Milvus、pgvector、Qdrant 等向量数据库，因此只能表述为 RAG MVP 或本地检索增强。",
+    "groundTruth": "当前项目已实现结构化 chunk、OpenAI Compatible embedding、pgvector 向量召回、本地文本召回兜底和业务 rerank；但 rerank 仍是业务规则重排，不是训练过的深度学习 reranker。",
     "evidence": [
       {
         "id": "ev-rag-005",
-        "text": "当前 RAG 是结构化 chunk + 本地召回 + rerank，不是向量数据库方案，不能写成已接入 Milvus、pgvector 或 Qdrant。",
+        "text": "当前 RAG 可配置启用 pgvector：MySQL 保存 chunk 主数据，pgvector 保存 embedding 向量索引，检索时先向量召回 topK 再做业务 rerank。",
         "documentType": "README",
         "sectionName": "不能夸大的地方",
         "tags": "rag,boundary,resume"
@@ -397,19 +397,19 @@
   },
   {
     "id": "media-001",
-    "question": "为什么当前项目不能说已经接入真实讯飞 ASR/TTS？",
-    "groundTruth": "当前项目只完成了 WebSocket 鉴权、音频帧接收、ASR 降级转写事件和 TTS 静音 WAV 下载闭环，没有接入真实语音识别或语音合成供应商。",
+    "question": "为什么当前项目不能说已经接入讯飞专有 ASR/TTS？",
+    "groundTruth": "当前项目已实现 WebSocket 鉴权、音频帧接收、OpenAI Compatible ASR 和 OpenAI Compatible TTS；但不是讯飞专有协议，写简历时不能说已接入讯飞。",
     "evidence": [
       {
         "id": "ev-media-001",
-        "text": "当前 ASR/TTS 是本地降级链路：ASR 返回中文降级转写提示，TTS 返回短静音 WAV，用于保证前端链路可运行。",
+        "text": "当前 ASR/TTS 支持本地降级和 OpenAI Compatible 音频接口两种 Provider：默认 local 保证前端链路可运行，设置 app.media.asr/tts.provider=openai 后会调用真实音频接口。",
         "documentType": "README",
         "sectionName": "媒体能力边界",
         "tags": "asr,tts,boundary"
       },
       {
         "id": "ev-media-002",
-        "text": "真实 ASR/TTS 后续需要替换 media/asr 和 media/tts 的 service 实现，并补充供应商配置、费用控制、超时重试和音频格式转换。",
+        "text": "OpenAI Compatible ASR/TTS 通过 app.media.asr/tts 配置启用；如果要接讯飞，需要另实现讯飞鉴权、WebSocket 音频协议、回调解析和费用控制。",
         "documentType": "PROJECT_DOC",
         "sectionName": "后续扩展",
         "tags": "asr,tts,provider"
@@ -419,19 +419,19 @@
   },
   {
     "id": "resume-001",
-    "question": "为什么扫描版 PDF 简历当前不能直接用于真实出题？",
-    "groundTruth": "扫描版 PDF 没有可提取的文字层，当前 PDFBox 只能稳定提取文本型 PDF，扫描版需要 OCR，否则系统不能伪造简历内容继续出题。",
+    "question": "扫描版 PDF 简历为什么需要 OCR 才能用于真实出题？",
+    "groundTruth": "扫描版 PDF 没有可提取的文字层，系统需要先用 OCR 把页面图像识别成文本，再进入简历结构化、chunk 和出题流程；如果未启用 OCR，不能伪造简历内容继续出题。",
     "evidence": [
       {
         "id": "ev-resume-001",
-        "text": "当前 PDF 解析支持文本型 PDF；没有文字层的扫描版 PDF 会提示需要 OCR，不能用占位文本伪造简历内容。",
+        "text": "当前 PDF 解析会先用 PDFBox 提取文本层；如果文本层为空且启用了 OCR，会把 PDF 页面渲染成图片后调用 Tesseract 识别。",
         "documentType": "PROJECT_DOC",
         "sectionName": "简历解析边界",
         "tags": "pdf,ocr,boundary"
       },
       {
         "id": "ev-resume-002",
-        "text": "扫描版 PDF 需要 OCR 才能提取文字，后续可以接入 OCR 服务或本地 OCR 工具后再进入结构化 chunk 和出题流程。",
+        "text": "扫描版 PDF 需要 OCR 才能提取文字，当前项目可配置 Tesseract CLI，把 PDF 渲染为图片后识别，再进入结构化 chunk 和出题流程。",
         "documentType": "QUESTION_BANK",
         "sectionName": "后续扩展",
         "tags": "ocr,resume"
@@ -462,3 +462,4 @@
     "category": "api_design"
   }
 ]
+

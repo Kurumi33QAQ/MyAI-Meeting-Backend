@@ -14,6 +14,34 @@ docker compose -f docker-compose.dev.yml up -d
 $env:MYSQL_URL="jdbc:mysql://localhost:3307/my_ai_meeting?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
 ```
 
+如果要启用 pgvector 向量检索，先启动 compose 里的 `myai-pgvector`，再设置：
+
+```powershell
+$env:RAG_VECTOR_ENABLED="true"
+$env:PGVECTOR_JDBC_URL="jdbc:postgresql://localhost:5432/my_ai_meeting_vector"
+$env:PGVECTOR_USERNAME="postgres"
+$env:PGVECTOR_PASSWORD="1234"
+$env:RAG_EMBEDDING_MODEL="text-embedding-3-small"
+```
+
+如果要启用扫描 PDF OCR，需要本机已安装 Tesseract 和中文/英文语言包：
+
+```powershell
+$env:RESUME_OCR_ENABLED="true"
+$env:RESUME_OCR_COMMAND="tesseract"
+$env:RESUME_OCR_LANGUAGE="chi_sim+eng"
+```
+
+如果要启用真实 ASR/TTS 音频接口：
+
+```powershell
+$env:MEDIA_ASR_PROVIDER="openai"
+$env:MEDIA_ASR_MODEL="whisper-1"
+$env:MEDIA_TTS_PROVIDER="openai"
+$env:MEDIA_TTS_MODEL="tts-1"
+$env:MEDIA_TTS_VOICE="alloy"
+```
+
 后端：
 
 ```powershell
@@ -89,8 +117,11 @@ Invoke-RestMethod http://localhost:8002/api/system/readiness
 - `data.dependencies.redis`：检查 Sa-Token 登录态、AI Guard、Single-flight 和热态缓存。
 - `data.dependencies.ai`：检查 mock/真实模型模式、模型名、API Key 和 Base URL 是否配置完整。
 - `data.dependencies.evaluation.caseCount`：检查 evaluation 默认测试集是否能被加载。
+- `data.dependencies.pgvector`：检查 pgvector 是否启用、向量维度、embedding 模型和 Key 配置。
+- `data.dependencies.ocr`：检查 OCR 是否启用、Tesseract 命令和语言包配置。
+- `data.dependencies.media`：检查 ASR/TTS 当前使用本地降级还是 OpenAI Compatible 真实音频接口。
 
-这个接口不会发起真实大模型调用，也不会输出 API Key 明文。真实模型联调失败时，建议先确认 readiness 里 `ai.status` 是否为 `UP`。
+这个接口不会发起真实大模型或音频调用，也不会输出 API Key 明文。真实模型、pgvector、OCR 或音频联调失败时，建议先确认 readiness 对应依赖是否为 `UP`。
 
 ## 手动验收顺序
 
@@ -103,7 +134,9 @@ Invoke-RestMethod http://localhost:8002/api/system/readiness
 7. 回答高质量答案，确认不强行追问。
 8. 查看报告，确认问答回放、分数和追问链存在。
 9. 刷新页面或重启后端，调用 restore/recover，确认会话可恢复。
-10. 测试 TTS/ASR 时，只验证链路和事件，不把降级结果当作真实语音识别。
+10. 启用 pgvector 后重新上传简历或重新创建会话，让 chunk 写入向量索引，再调用 `/api/retrieval/evidence`。
+11. 启用 OCR 后上传扫描版 PDF，确认不再提示“缺少文字层”，而是进入 Tesseract 识别。
+12. 启用 `MEDIA_ASR_PROVIDER=openai` / `MEDIA_TTS_PROVIDER=openai` 后再测试语音链路；默认 local 模式只用于本地降级验收。
 
 ## DataGrip 可视化建议
 
@@ -155,7 +188,7 @@ keys meetingagent:*
 
 优先检查：
 
-- 上传的 PDF 是否为文本型 PDF，扫描版目前无法 OCR。
+- 上传的 PDF 是否为文本型 PDF；如果是扫描版 PDF，确认 `RESUME_OCR_ENABLED=true`、Tesseract 命令可执行，并且已安装 `chi_sim`/`eng` 语言包。
 - 岗位/公司/JD 是否真的传到了后端。
 - `TAVILY_API_KEY` 是否配置，联网岗位情报是否成功。
 - MongoDB 题目快照里的 evidence 和 agent trace 是否包含真实简历项目。
