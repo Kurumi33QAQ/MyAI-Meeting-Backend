@@ -1,0 +1,40 @@
+services:
+  myai-mysql:
+    image: mysql:8.0
+    container_name: myai-meeting-mysql-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: my_ai_meeting
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"
+    volumes:
+      - myai_mysql_data:/var/lib/mysql
+      - ./src/main/resources/db/schema-mysql.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+  myai-mongodb:
+    image: mongo:7
+    container_name: myai-meeting-mongo-dev
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - myai_mongo_data:/data/db
+
+  myai-redis:
+    image: redis:7
+    container_name: myai-meeting-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - myai_redis_data:/data
+
+volumes:
+  myai_mysql_data:
+  myai_mongo_data:
+  myai_redis_data:

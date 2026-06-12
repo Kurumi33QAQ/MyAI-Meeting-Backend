@@ -2,6 +2,18 @@
 
 ## 启动命令
 
+启动开发依赖：
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d
+```
+
+如果你使用本机 MySQL `localhost:3306`，保持默认配置即可。如果你使用 `docker-compose.dev.yml` 里的 MySQL，因为它映射到本机 `3307`，启动后端前需要设置：
+
+```powershell
+$env:MYSQL_URL="jdbc:mysql://localhost:3307/my_ai_meeting?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+```
+
 后端：
 
 ```powershell
@@ -60,6 +72,25 @@ mvn test
 - Redis AI Guard
 - 模拟面试、追问和报告
 - WebSocket ASR 降级和 TTS 音频下载
+
+## 运行环境自检
+
+后端启动后先调用：
+
+```powershell
+Invoke-RestMethod http://localhost:8002/api/system/readiness
+```
+
+重点看这些字段：
+
+- `data.status`：`UP` 表示核心依赖可用，`DEGRADED` 表示至少有一个依赖异常。
+- `data.dependencies.mysql`：检查用户、面试记录、评测报告等结构化数据存储。
+- `data.dependencies.mongodb`：检查聊天消息、Agent trace、面试运行快照等半结构化数据存储。
+- `data.dependencies.redis`：检查 Sa-Token 登录态、AI Guard、Single-flight 和热态缓存。
+- `data.dependencies.ai`：检查 mock/真实模型模式、模型名、API Key 和 Base URL 是否配置完整。
+- `data.dependencies.evaluation.caseCount`：检查 evaluation 默认测试集是否能被加载。
+
+这个接口不会发起真实大模型调用，也不会输出 API Key 明文。真实模型联调失败时，建议先确认 readiness 里 `ai.status` 是否为 `UP`。
 
 ## 手动验收顺序
 
@@ -140,4 +171,3 @@ keys meetingagent:*
 - `interview_session`
 - `interview_question_snapshot`
 - `interview_runtime_snapshot`
-

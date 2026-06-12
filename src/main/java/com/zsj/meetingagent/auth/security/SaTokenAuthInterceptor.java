@@ -23,6 +23,7 @@ public class SaTokenAuthInterceptor implements HandlerInterceptor {
     private static final String BEARER_PREFIX = "Bearer ";
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/health",
+            "/api/system/readiness",
             "/actuator/health",
             "/api/auth/login",
             "/api/auth/register",

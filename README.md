@@ -57,10 +57,16 @@ Redis 默认连接：
 localhost:6379
 ```
 
-可以用 Docker 快速启动 Redis：
+可以用 Docker 快速启动完整开发依赖：
 
 ```powershell
-docker run -d --name myai-redis -p 6379:6379 redis:7
+docker compose -f docker-compose.dev.yml up -d
+```
+
+`docker-compose.dev.yml` 中 MySQL 映射到本机 `3307`，避免和你电脑已有的 `3306` MySQL 冲突。如果使用 compose 内的 MySQL 启动后端，请额外设置：
+
+```powershell
+$env:MYSQL_URL="jdbc:mysql://localhost:3307/my_ai_meeting?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
 ```
 
 ### 2. 配置环境变量
@@ -101,6 +107,14 @@ http://localhost:8002
 ```powershell
 Invoke-RestMethod http://localhost:8002/api/health
 ```
+
+运行环境自检：
+
+```powershell
+Invoke-RestMethod http://localhost:8002/api/system/readiness
+```
+
+自检接口会检查 MySQL/H2、MongoDB、Redis、AI 配置和 evaluation 数据集是否可用，不会输出 API Key 明文。真实模型模式下如果缺少 `OPENAI_API_KEY` 或 `OPENAI_BASE_URL`，该接口会显示 `DEGRADED`，方便先排查环境再联调页面。
 
 ### 4. 运行测试
 
