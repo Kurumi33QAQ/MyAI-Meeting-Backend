@@ -22,6 +22,116 @@
     "category": "java_backend"
   },
   {
+    "id": "java-backend-002",
+    "question": "为什么登录密码不能明文存储，BCrypt 相比普通哈希有什么优势？",
+    "groundTruth": "密码不能明文存储，BCrypt 会自动加盐并通过计算成本增加暴力破解难度，即使相同密码也会生成不同哈希。",
+    "evidence": [
+      {
+        "id": "ev-java-003",
+        "text": "用户密码应使用 BCrypt 等慢哈希算法保存。BCrypt 内置盐值和成本因子，相同明文密码每次生成的哈希也不同。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "安全基础",
+        "tags": "java_backend,auth,security"
+      },
+      {
+        "id": "ev-java-004",
+        "text": "登录校验时不需要解密密码，而是用 BCrypt 的 matches 方法比较明文输入和数据库中的哈希。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "认证流程",
+        "tags": "auth,backend"
+      }
+    ],
+    "category": "java_backend"
+  },
+  {
+    "id": "java-backend-003",
+    "question": "MySQL 和 MongoDB 在 AI 面试项目中的职责应该如何划分？",
+    "groundTruth": "MySQL 适合保存用户、简历、面试记录、知识文档和评测记录等结构化主数据，MongoDB 适合保存聊天消息、Agent trace、题目快照和运行时快照等半结构化长文本。",
+    "evidence": [
+      {
+        "id": "ev-storage-001",
+        "text": "MySQL 存储用户、简历文件、知识库文档、面试记录、评测任务等结构化数据，便于关系型查询和字段中文备注。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "数据库职责",
+        "tags": "mysql,backend,architecture"
+      },
+      {
+        "id": "ev-storage-002",
+        "text": "MongoDB 存储 AI 会话消息、Agent 执行轨迹、面试题快照和运行时快照，因为这些内容长文本多且结构会随 Agent 和 Prompt 演进。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "数据库职责",
+        "tags": "mongodb,agent,interview"
+      }
+    ],
+    "category": "java_backend"
+  },
+  {
+    "id": "sse-001",
+    "question": "AI 对话为什么适合使用 SSE 流式响应？",
+    "groundTruth": "SSE 适合服务端向浏览器单向推送文本流，能让大模型生成的 token 或文本片段逐步展示，降低用户等待完整回答的体感延迟。",
+    "evidence": [
+      {
+        "id": "ev-sse-001",
+        "text": "SSE 是服务端到浏览器的单向事件流，适合 AI 文本生成这种服务端连续输出、前端持续追加展示的场景。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "流式响应",
+        "tags": "sse,ai,frontend"
+      },
+      {
+        "id": "ev-sse-002",
+        "text": "相比等完整回答生成后再返回，SSE 可以让前端像 ChatGPT 一样逐步显示内容，改善长回答场景的交互体验。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "考察点",
+        "tags": "sse,ux"
+      }
+    ],
+    "category": "ai_chat"
+  },
+  {
+    "id": "agent-001",
+    "question": "模拟面试中多 Agent 协同出题相比单次 LLM 出题有什么价值？",
+    "groundTruth": "多 Agent 可以把简历分析、岗位上下文分析、出题设计和回答评估拆开，并保存每个 Agent 的轨迹，提升可解释性和后续评测能力。",
+    "evidence": [
+      {
+        "id": "ev-agent-001",
+        "text": "多 Agent 协同面试把简历分析 Agent、岗位上下文 Agent、出题设计 Agent、回答评估 Agent 拆开执行，并将 agent_run 和 agent_step_trace 存入 MongoDB。",
+        "documentType": "INTERVIEW_TRACE",
+        "sectionName": "多Agent编排",
+        "tags": "agent,interview,core"
+      },
+      {
+        "id": "ev-agent-002",
+        "text": "相比单次 LLM 出题，多 Agent 轨迹能解释题目为什么生成、参考了哪些证据、哪个角色做了什么观察。",
+        "documentType": "INTERVIEW_TRACE",
+        "sectionName": "可解释性",
+        "tags": "agent,interview"
+      }
+    ],
+    "category": "interview_agent"
+  },
+  {
+    "id": "agent-002",
+    "question": "Agent 的 Thought-Action-Observation-Final Answer 流程分别代表什么？",
+    "groundTruth": "Thought 表示分析用户意图，Action 表示选择并调用工具，Observation 表示接收工具结果，Final Answer 表示结合上下文和工具结果输出最终回答。",
+    "evidence": [
+      {
+        "id": "ev-agent-003",
+        "text": "Agent 执行轨迹分为 Thought、Action、Observation、Final Answer：先思考，再调用工具，再观察工具结果，最后生成回答。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "Agent执行流程",
+        "tags": "agent,tool_calling"
+      },
+      {
+        "id": "ev-agent-004",
+        "text": "项目把 Agent run 和 step trace 保存到 MongoDB，方便调试每一步工具调用和最终回答来源。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "可追踪性",
+        "tags": "agent,mongodb"
+      }
+    ],
+    "category": "agent"
+  },
+  {
     "id": "rag-001",
     "question": "为什么简历 RAG 的 chunk 不应该只按固定字数切分？",
     "groundTruth": "简历 RAG 应按基本信息、技能栈、项目经历、实习经历等业务结构切分，避免项目背景、职责、技术方案和结果被切散。",
@@ -44,26 +154,48 @@
     "category": "rag"
   },
   {
-    "id": "interview-001",
-    "question": "模拟面试中多 Agent 协同出题相比单次 LLM 出题有什么价值？",
-    "groundTruth": "多 Agent 可以把简历分析、岗位上下文分析、出题设计和回答评估拆开，并保存每个 Agent 的轨迹，提升可解释性和后续评测能力。",
+    "id": "rag-002",
+    "question": "RAG 中 rerank 的作用是什么？",
+    "groundTruth": "rerank 用于对第一阶段召回的候选证据重新排序，结合业务字段、标签、章节和标准答案相似度选择更适合作为最终上下文的 evidence。",
     "evidence": [
       {
-        "id": "ev-agent-001",
-        "text": "多 Agent 协同面试把简历分析 Agent、岗位上下文 Agent、出题设计 Agent、回答评估 Agent 拆开执行，并将 agent_run 和 agent_step_trace 存入 MongoDB。",
-        "documentType": "INTERVIEW_TRACE",
-        "sectionName": "多Agent编排",
-        "tags": "agent,interview,core"
+        "id": "ev-rag-003",
+        "text": "检索流程先召回 topK 候选，再通过 rerank 结合 sectionName、tags、documentType、与标准答案相似度等特征重排，最终选择 top3 到 top5。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "rerank策略",
+        "tags": "rag,rerank,core"
       },
       {
-        "id": "ev-agent-002",
-        "text": "相比单次 LLM 出题，多 Agent 轨迹能解释题目为什么生成、参考了哪些证据、哪个角色做了什么观察。",
-        "documentType": "INTERVIEW_TRACE",
-        "sectionName": "可解释性",
-        "tags": "agent,interview"
+        "id": "ev-rag-004",
+        "text": "rerank 可以减少只靠关键词召回带来的噪声，让最终上下文更贴合项目经历、岗位要求、考察点或评分标准。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "考察点",
+        "tags": "rerank,interview"
       }
     ],
-    "category": "interview_agent"
+    "category": "rag"
+  },
+  {
+    "id": "rag-003",
+    "question": "为什么当前项目不能说已经接入向量数据库？",
+    "groundTruth": "当前项目实现的是结构化 chunk、本地文本召回和业务 rerank，并没有接入 Milvus、pgvector、Qdrant 等向量数据库，因此只能表述为 RAG MVP 或本地检索增强。",
+    "evidence": [
+      {
+        "id": "ev-rag-005",
+        "text": "当前 RAG 是结构化 chunk + 本地召回 + rerank，不是向量数据库方案，不能写成已接入 Milvus、pgvector 或 Qdrant。",
+        "documentType": "README",
+        "sectionName": "不能夸大的地方",
+        "tags": "rag,boundary,resume"
+      },
+      {
+        "id": "ev-rag-006",
+        "text": "后续可以替换 RetrievalService 底层实现为 Spring AI VectorStore 或向量数据库，但在真正接入前 README 和简历必须如实描述当前边界。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "后续扩展",
+        "tags": "vectorstore,rag"
+      }
+    ],
+    "category": "rag_boundary"
   },
   {
     "id": "liteflow-001",
@@ -86,5 +218,247 @@
       }
     ],
     "category": "interview_rule"
+  },
+  {
+    "id": "followup-001",
+    "question": "为什么模拟面试的追问不能只输出“请补充技术细节”？",
+    "groundTruth": "追问应结合当前题目、用户回答、简历技术实体、岗位要求和缺失点生成具体问题，否则用户不知道从哪个角度回答，也不符合真实面试体验。",
+    "evidence": [
+      {
+        "id": "ev-followup-001",
+        "text": "追问生成器需要结合当前题目、回答内容、缺失考点、岗位上下文和前序追问链，禁止只输出“补充技术细节”等泛化问题。",
+        "documentType": "INTERVIEW_RULE",
+        "sectionName": "追问质量",
+        "tags": "followup,interview,quality"
+      },
+      {
+        "id": "ev-followup-002",
+        "text": "如果用户提到 Redis String、Set、JWT、RabbitMQ、MySQL 等技术实体，追问应围绕具体业务场景、设计原因、问题排查和验证结果继续收窄。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "追问兜底",
+        "tags": "followup,backend"
+      }
+    ],
+    "category": "interview_rule"
+  },
+  {
+    "id": "interview-001",
+    "question": "为什么模拟面试不应该固定只有 5 道题？",
+    "groundTruth": "真实技术面通常会根据候选人回答深度动态调整题量，项目默认 8 道起步，根据表现扩展到 12 或 15 道，追问单独挂在父问题下。",
+    "evidence": [
+      {
+        "id": "ev-interview-001",
+        "text": "自适应题量策略默认 8 道主问题起步，根据回答质量和覆盖情况扩展到 12 或 15 道，追问不计入主问题数量。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "题量策略",
+        "tags": "interview,adaptive,core"
+      },
+      {
+        "id": "ev-interview-002",
+        "text": "前端展示已答主问题数和当前计划题数，让用户知道题量会根据回答表现动态变化。",
+        "documentType": "FRONTEND_FLOW",
+        "sectionName": "进度展示",
+        "tags": "interview,frontend"
+      }
+    ],
+    "category": "interview_flow"
+  },
+  {
+    "id": "interview-002",
+    "question": "用户没有填写岗位、公司和 JD 时，系统应该如何生成面试题？",
+    "groundTruth": "用户未填写岗位上下文时，系统不应该假设默认岗位或联网搜索，而应只基于简历内容生成题目，并在需要时提示可补充目标岗位以提高匹配度。",
+    "evidence": [
+      {
+        "id": "ev-interview-003",
+        "text": "岗位信息应由用户决定是否提供。用户全部留空时，只分析真实简历，不猜测岗位，也不触发联网搜索。",
+        "documentType": "PROJECT_DECISION",
+        "sectionName": "岗位上下文",
+        "tags": "interview,jd,boundary"
+      },
+      {
+        "id": "ev-interview-004",
+        "text": "填写岗位、公司或 JD 时，系统才尝试检索公开岗位情报，并将来源 URL 保存为 evidence；外部失败时继续使用简历和用户填写内容。",
+        "documentType": "PROJECT_DECISION",
+        "sectionName": "岗位情报",
+        "tags": "interview,search,evidence"
+      }
+    ],
+    "category": "interview_flow"
+  },
+  {
+    "id": "guard-001",
+    "question": "Redis Single-flight 在 AI 调用稳定性治理里解决什么问题？",
+    "groundTruth": "Single-flight 用 Redis 锁识别相同用户的重复 AI 请求，让一个请求真正调用模型，其他请求等待或复用结果，减少重复调用、费用浪费和并发压力。",
+    "evidence": [
+      {
+        "id": "ev-guard-001",
+        "text": "AI Guard 使用 Redis SET NX + TTL 实现 Single-flight，同一用户相同请求只允许一个 owner 真正调用模型，其余请求等待结果或走降级。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "稳定性治理",
+        "tags": "redis,singleflight,ai_guard"
+      },
+      {
+        "id": "ev-guard-002",
+        "text": "Single-flight 可以降低重复请求造成的模型接口压力和费用浪费，配合超时、限流和缓存回放提升后端稳定性。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "考察点",
+        "tags": "redis,stability"
+      }
+    ],
+    "category": "ai_guard"
+  },
+  {
+    "id": "guard-002",
+    "question": "AI 服务调用失败时，后端为什么需要中文降级回答？",
+    "groundTruth": "模型接口可能因为网络、密钥、限流或超时失败，中文降级回答能让前端得到稳定响应，并明确提示用户稍后重试或拆分问题，而不是暴露异常堆栈。",
+    "evidence": [
+      {
+        "id": "ev-guard-003",
+        "text": "AI Guard 配置了调用超时、失败降级和中文 fallbackAnswer，模型不可用时返回用户可理解的提示，不把底层异常直接暴露给前端。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "失败降级",
+        "tags": "ai_guard,timeout,fallback"
+      },
+      {
+        "id": "ev-guard-004",
+        "text": "降级文案应说明 AI 服务暂时不稳定，并建议稍后重试或把问题拆得更具体。",
+        "documentType": "CONFIG",
+        "sectionName": "降级文案",
+        "tags": "fallback,chinese_friendly"
+      }
+    ],
+    "category": "ai_guard"
+  },
+  {
+    "id": "runtime-001",
+    "question": "面试长会话为什么需要 Redis 热态和 MongoDB 冷快照两层恢复？",
+    "groundTruth": "Redis 适合保存当前题号、状态等高频临时热态，MongoDB 冷快照用于在 Redis 丢失或后端重启后恢复核心会话，避免用户面试中断。",
+    "evidence": [
+      {
+        "id": "ev-runtime-001",
+        "text": "长会话恢复采用 Redis 热态优先、MongoDB 冷快照兜底、会话记录重建的顺序，恢复来源可区分 HOT_REDIS、COLD_MONGO 和 REBUILT_FROM_SESSION。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "长会话恢复",
+        "tags": "redis,mongodb,runtime"
+      },
+      {
+        "id": "ev-runtime-002",
+        "text": "模拟面试是多轮流程，刷新页面、后端重启或缓存丢失时，如果没有快照恢复，用户可能丢失当前题目和追问链。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "考察点",
+        "tags": "runtime,interview"
+      }
+    ],
+    "category": "runtime"
+  },
+  {
+    "id": "evaluation-001",
+    "question": "为什么 AI 项目不能只说“效果更好”，而要做 evaluation？",
+    "groundTruth": "AI 项目输出具有不确定性，必须用测试集和统计脚本对 baseline、RAG、rerank、自检等方案进行对照，统计幻觉率、命中率、引用准确率和平均响应时间。",
+    "evidence": [
+      {
+        "id": "ev-eval-001",
+        "text": "Evaluation 模块使用同一批 eval_cases 同时跑 baseline、rag_without_rerank、rag_with_rerank、self_check_rag 四种方案。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "评测方案",
+        "tags": "evaluation,metrics"
+      },
+      {
+        "id": "ev-eval-002",
+        "text": "评测指标包括 hallucination_rate、answer_hit_rate、citation_accuracy 和 avg_latency_ms，README 和简历只能引用实际报告中的真实数值。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "指标统计",
+        "tags": "evaluation,resume"
+      }
+    ],
+    "category": "evaluation"
+  },
+  {
+    "id": "evaluation-002",
+    "question": "hallucination_rate 在本项目中如何计算？",
+    "groundTruth": "hallucination_rate 等于无证据支持或与标准答案冲突的回答数除以总问题数；对于 RAG 策略，回答正确但引用错误也会被视为存在幻觉风险。",
+    "evidence": [
+      {
+        "id": "ev-eval-003",
+        "text": "hallucination_rate = 无证据支持或与标准答案冲突的回答数 / 总问题数。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "指标定义",
+        "tags": "evaluation,hallucination"
+      },
+      {
+        "id": "ev-eval-004",
+        "text": "对于 RAG 策略，系统不仅检查答案是否命中 groundTruth，也检查 evidence 引用是否正确，因为错误引用会影响回答可信度。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "引用准确率",
+        "tags": "evaluation,citation"
+      }
+    ],
+    "category": "evaluation"
+  },
+  {
+    "id": "media-001",
+    "question": "为什么当前项目不能说已经接入真实讯飞 ASR/TTS？",
+    "groundTruth": "当前项目只完成了 WebSocket 鉴权、音频帧接收、ASR 降级转写事件和 TTS 静音 WAV 下载闭环，没有接入真实语音识别或语音合成供应商。",
+    "evidence": [
+      {
+        "id": "ev-media-001",
+        "text": "当前 ASR/TTS 是本地降级链路：ASR 返回中文降级转写提示，TTS 返回短静音 WAV，用于保证前端链路可运行。",
+        "documentType": "README",
+        "sectionName": "媒体能力边界",
+        "tags": "asr,tts,boundary"
+      },
+      {
+        "id": "ev-media-002",
+        "text": "真实 ASR/TTS 后续需要替换 media/asr 和 media/tts 的 service 实现，并补充供应商配置、费用控制、超时重试和音频格式转换。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "后续扩展",
+        "tags": "asr,tts,provider"
+      }
+    ],
+    "category": "media_boundary"
+  },
+  {
+    "id": "resume-001",
+    "question": "为什么扫描版 PDF 简历当前不能直接用于真实出题？",
+    "groundTruth": "扫描版 PDF 没有可提取的文字层，当前 PDFBox 只能稳定提取文本型 PDF，扫描版需要 OCR，否则系统不能伪造简历内容继续出题。",
+    "evidence": [
+      {
+        "id": "ev-resume-001",
+        "text": "当前 PDF 解析支持文本型 PDF；没有文字层的扫描版 PDF 会提示需要 OCR，不能用占位文本伪造简历内容。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "简历解析边界",
+        "tags": "pdf,ocr,boundary"
+      },
+      {
+        "id": "ev-resume-002",
+        "text": "扫描版 PDF 需要 OCR 才能提取文字，后续可以接入 OCR 服务或本地 OCR 工具后再进入结构化 chunk 和出题流程。",
+        "documentType": "QUESTION_BANK",
+        "sectionName": "后续扩展",
+        "tags": "ocr,resume"
+      }
+    ],
+    "category": "resume_boundary"
+  },
+  {
+    "id": "frontend-001",
+    "question": "为什么旧前端兼容接口应该放在 frontendadapter 模块，而不是写进核心业务 Controller？",
+    "groundTruth": "旧前端兼容接口只负责路径和字段适配，核心业务应委托 auth、chat、resume、interview 等模块，避免旧路径和作者风格污染自己的项目结构。",
+    "evidence": [
+      {
+        "id": "ev-frontend-001",
+        "text": "frontendadapter 只做旧路径和字段名适配，核心简历、面试、AI 对话和认证流程仍委托各自业务模块。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "接口迁移",
+        "tags": "frontendadapter,api"
+      },
+      {
+        "id": "ev-frontend-002",
+        "text": "新接口使用 /api/auth、/api/resumes、/api/interview-sessions 等项目自己的路径，旧 /api/xunzhi/v1/** 只作为兼容层保留。",
+        "documentType": "PROJECT_DOC",
+        "sectionName": "命名风格",
+        "tags": "api,style"
+      }
+    ],
+    "category": "api_design"
   }
 ]

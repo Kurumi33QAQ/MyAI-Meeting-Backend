@@ -137,6 +137,8 @@ Authorization: Bearer <token>
 - `rag_with_rerank`
 - `self_check_rag`
 
+默认测试集包含 21 条中文样本，覆盖 Java 后端、RAG、Agent、LiteFlow、稳定性治理、会话恢复、媒体边界等类别。报告会输出总体指标和按类别拆分的指标，详见 [Evaluation 测试集说明](EVALUATION_DATASET.md)。
+
 ## AI Guard
 
 | 方法 | 路径 | 说明 |
@@ -160,4 +162,3 @@ Authorization: Bearer <token>
 ## 旧前端兼容接口
 
 旧前端仍可调用 `/api/xunzhi/v1/**`，但核心业务推荐使用新接口。兼容层只做路径和字段适配，不承载核心业务逻辑。
-

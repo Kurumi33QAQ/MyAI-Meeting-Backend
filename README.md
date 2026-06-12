@@ -146,6 +146,7 @@ MySQL 建表脚本位于 `src/main/resources/db/schema-mysql.sql`，字段均要
 - [架构说明](docs/ARCHITECTURE.md)
 - [接口文档](docs/API.md)
 - [模拟面试 Agent 讲解](docs/INTERVIEW_AGENT_PLAYBOOK.md)
+- [Evaluation 测试集说明](docs/EVALUATION_DATASET.md)
 - [运行与验收手册](docs/OPERATIONS.md)
 - [简历与面试表达](docs/RESUME_GUIDE.md)
 
@@ -154,8 +155,7 @@ MySQL 建表脚本位于 `src/main/resources/db/schema-mysql.sql`，字段均要
 以下内容已经在代码中有边界控制，README 和简历也必须如实表达：
 
 - 当前 RAG 是结构化 chunk + 本地召回 + rerank，不是向量数据库方案。
-- 当前 evaluation 有可运行模块和小样本报告能力，但正式简历数据必须来自扩充测试集实际运行结果。
+- 当前 evaluation 已内置 21 条中文项目问答测试集并支持分类报告；正式简历数据必须来自你实际运行生成的报告。
 - 当前 ASR/TTS 是本地降级闭环，不是真实讯飞实时语音识别/合成。
 - 当前神态/表情分析没有实现，不能写进已完成能力。
 - 当前 PDF 解析支持文本型 PDF，扫描版 PDF 需要后续 OCR。
-

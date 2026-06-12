@@ -381,6 +381,7 @@ public class DefaultEvaluationService implements EvaluationService {
         builder.append("- runId: ").append(response.runId()).append('\n');
         builder.append("- dataset: ").append(response.datasetName()).append('\n');
         builder.append("- totalCases: ").append(response.totalCases()).append("\n\n");
+        builder.append("## Overall Metrics\n\n");
         builder.append("| strategy | hallucination_rate | answer_hit_rate | citation_accuracy | avg_latency_ms |\n");
         builder.append("| --- | ---: | ---: | ---: | ---: |\n");
         for (EvaluationStrategySummaryResponse summary : response.summaries()) {
@@ -396,8 +397,50 @@ public class DefaultEvaluationService implements EvaluationService {
                     .append(summary.avgLatencyMs())
                     .append(" |\n");
         }
+        appendCategoryBreakdown(builder, response.caseResults());
         builder.append("\n> 指标由实际测试集运行结果统计生成，README 和简历只能引用本报告中的真实数值。\n");
         return builder.toString();
+    }
+
+    private void appendCategoryBreakdown(StringBuilder builder, List<EvaluationCaseResultResponse> caseResults) {
+        if (caseResults == null || caseResults.isEmpty()) {
+            return;
+        }
+        builder.append("\n## Category Breakdown\n\n");
+        builder.append("| strategy | category | total_cases | hallucination_rate | answer_hit_rate | citation_accuracy | avg_latency_ms |\n");
+        builder.append("| --- | --- | ---: | ---: | ---: | ---: | ---: |\n");
+        Map<String, List<EvaluationCaseResultResponse>> grouped = caseResults.stream()
+                .collect(Collectors.groupingBy(
+                        result -> result.strategy() + "\t" + result.category(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        grouped.forEach((key, results) -> {
+            String[] parts = key.split("\t", 2);
+            int total = results.size();
+            int hallucinated = (int) results.stream().filter(EvaluationCaseResultResponse::hallucinated).count();
+            int answerHits = (int) results.stream().filter(EvaluationCaseResultResponse::answerCorrect).count();
+            int citationHits = (int) results.stream().filter(EvaluationCaseResultResponse::citationCorrect).count();
+            long avgLatency = Math.round(results.stream()
+                    .mapToLong(EvaluationCaseResultResponse::latencyMs)
+                    .average()
+                    .orElse(0.0));
+            builder.append("| ")
+                    .append(parts[0])
+                    .append(" | ")
+                    .append(parts.length > 1 ? parts[1] : "unknown")
+                    .append(" | ")
+                    .append(total)
+                    .append(" | ")
+                    .append(rate(hallucinated, total))
+                    .append(" | ")
+                    .append(rate(answerHits, total))
+                    .append(" | ")
+                    .append(rate(citationHits, total))
+                    .append(" | ")
+                    .append(avgLatency)
+                    .append(" |\n");
+        });
     }
 
     private EvaluationCaseResult toEntity(String runId, EvaluationCaseResultResponse result, Instant createdAt) {
