@@ -163,6 +163,7 @@ MySQL 建表脚本位于 `src/main/resources/db/schema-mysql.sql`，字段均要
 - [Evaluation 测试集说明](docs/EVALUATION_DATASET.md)
 - [运行与验收手册](docs/OPERATIONS.md)
 - [简历与面试表达](docs/RESUME_GUIDE.md)
+- [项目面试讲解手册](docs/PROJECT_PRESENTATION.md)
 
 ## 不能夸大的地方
 
